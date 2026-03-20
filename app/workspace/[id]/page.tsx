@@ -7,11 +7,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useLang } from '@/contexts/LangContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { ThemeToggle } from '@/components/ui'
-import type { Session, Trade, Candle } from '@/types'
+import type { Session, Trade, Candle, Symbol } from '@/types'
 import type { TimeFrame } from '@/lib/loadCsvData'
 import { getSymbol } from '@/data/symbols'
 import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
-import { calcPnl, checkSlTp, fmtPrice, fmtMoney, interpolateDate, isValidSL, isValidTP, cn } from '@/lib/utils'
+import { calcPnl, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
 import { Spinner, Badge, TabBar } from '@/components/ui'
 import { WorkspaceChart } from '@/components/chart/WorkspaceChart'
 
@@ -19,15 +19,15 @@ const SKIP_OPTIONS = [3, 5, 10, 15, 30, 60, 120, 240]
 const WEEKDAYS     = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 const TIMEFRAMES: TimeFrame[] = ['m1', 'm5', 'm15', 'm30', 'h1', 'h4', 'd1', 'w1', 'M1']
 const TIMEZONES = [
-  { value: 'UTC',  label: 'UTC',          offset: 0  },
-  { value: 'EST',  label: 'EST (NYC)',     offset: -5 },
-  { value: 'EDT',  label: 'EDT (NYC)',     offset: -4 },
-  { value: 'GMT',  label: 'GMT (London)', offset: 0  },
-  { value: 'BST',  label: 'BST (London)', offset: 1  },
-  { value: 'CET',  label: 'CET (Europe)', offset: 1  },
-  { value: 'CEST', label: 'CEST (Europe)',offset: 2  },
-  { value: 'JST',  label: 'JST (Tokyo)',  offset: 9  },
-  { value: 'AEDT', label: 'AEDT (Sydney)',offset: 11 },
+  { value: 'UTC',  label: 'UTC',           offset: 0  },
+  { value: 'EST',  label: 'EST (NYC)',      offset: -5 },
+  { value: 'EDT',  label: 'EDT (NYC)',      offset: -4 },
+  { value: 'GMT',  label: 'GMT (London)',   offset: 0  },
+  { value: 'BST',  label: 'BST (London)',   offset: 1  },
+  { value: 'CET',  label: 'CET (Europe)',   offset: 1  },
+  { value: 'CEST', label: 'CEST (Europe)',  offset: 2  },
+  { value: 'JST',  label: 'JST (Tokyo)',    offset: 9  },
+  { value: 'AEDT', label: 'AEDT (Sydney)',  offset: 11 },
 ]
 
 export default function WorkspacePage() {
@@ -39,40 +39,43 @@ export default function WorkspacePage() {
   const { theme, toggleTheme } = useTheme()
   const supabase = createClient()
 
-  const [session,  setSession]  = useState<Session | null>(null)
-  const [candles,  setCandles]  = useState<Candle[]>([])
-  const [idx,      setIdx]      = useState(80)
-  const [trades,   setTrades]   = useState<Trade[]>([])
-  const [balance,  setBalance]  = useState(0)
-  const [skipVal,  setSkipVal]  = useState(5)
-  const [tradeTab, setTradeTab] = useState('open')
-  const [loading,  setLoading]  = useState(true)
-  const [qty,      setQty]      = useState('0.10')
-  const [slVal,    setSlVal]    = useState('')
-  const [tpVal,    setTpVal]    = useState('')
-  const [timeframe, setTimeframe] = useState<TimeFrame>('m1')
-  const [timezone, setTimezone] = useState('UTC')
-  // Account breach modal
-  const [breached, setBreached] = useState(false)
+  const [session,         setSession]         = useState<Session | null>(null)
+  const [candles,         setCandles]         = useState<Candle[]>([])
+  const [idx,             setIdx]             = useState(80)
+  const [trades,          setTrades]          = useState<Trade[]>([])
+  const [balance,         setBalance]         = useState(0)
+  const [skipVal,         setSkipVal]         = useState(5)
+  const [tradeTab,        setTradeTab]        = useState('open')
+  const [loading,         setLoading]         = useState(true)
+  const [qty,             setQty]             = useState('0.10')
+  const [slVal,           setSlVal]           = useState('')
+  const [tpVal,           setTpVal]           = useState('')
+  const [timeframe,       setTimeframe]       = useState<TimeFrame>('m1')
+  const [timezone,        setTimezone]        = useState('UTC')
+  const [accountBreached, setAccountBreached] = useState(false)
+  const [slError,         setSlError]         = useState('')
+  const [tpError,         setTpError]         = useState('')
 
-  const stateRef = useRef({ candles, idx, trades, balance })
+  const stateRef           = useRef({ candles, idx, trades, balance })
   const originalCandlesRef = useRef<Candle[]>([])
-  useEffect(() => { stateRef.current = { candles, idx, trades, balance } }, [candles, idx, trades, balance])
+  const symRef             = useRef<Symbol>(getSymbol('XAUUSD'))
 
+  useEffect(() => { stateRef.current = { candles, idx, trades, balance } }, [candles, idx, trades, balance])
   useEffect(() => { if (user && id) init() }, [user, id])
 
-  // Fix 1: preserve current time position when switching timeframes
+  // ── Fix 1: Timeframe change preserves current timestamp ──────────
   useEffect(() => {
     if (!originalCandlesRef.current.length) return
-    const currentTime = stateRef.current.candles[stateRef.current.idx - 1]?.time
-    const aggregated  = aggregateCandles(originalCandlesRef.current, timeframe)
+    const currentTs = stateRef.current.candles[stateRef.current.idx - 1]?.time
+    const aggregated = aggregateCandles(originalCandlesRef.current, timeframe)
     setCandles(aggregated)
 
-    if (currentTime) {
-      // Find the index of the first candle >= current time
-      let newIdx = aggregated.findIndex(c => c.time >= currentTime)
-      if (newIdx === -1) newIdx = aggregated.length - 1
-      setIdx(Math.max(1, Math.min(newIdx + 1, aggregated.length)))
+    if (currentTs) {
+      let newIdx = Math.min(80, aggregated.length)
+      for (let i = 0; i < aggregated.length; i++) {
+        if (aggregated[i].time >= currentTs) { newIdx = i + 1; break }
+      }
+      setIdx(Math.min(newIdx, aggregated.length))
     } else {
       setIdx(Math.min(80, aggregated.length))
     }
@@ -84,6 +87,7 @@ export default function WorkspacePage() {
     const s = sess as Session
     setSession(s)
     setBalance(s.end_capital)
+    symRef.current = getSymbol(s.symbol)
 
     let c: Candle[]
     try {
@@ -119,15 +123,14 @@ export default function WorkspacePage() {
     setLoading(false)
   }
 
+  // ── Fix 3 & 4: advance with correct PnL and balance breach check ──
   const advance = useCallback(async (steps: number) => {
+    if (stateRef.current.balance <= 0) return
     const { candles: c, idx: i, trades: tr, balance: bal } = stateRef.current
     if (!c.length) return
-    const end   = Math.min(i + steps, c.length)
+    const cs   = symRef.current.contractSize
+    const end  = Math.min(i + steps, c.length)
     const slice = c.slice(i, end)
-
-    const sym = getSymbol(stateRef.current.candles.length > 0
-      ? (session?.symbol ?? 'XAUUSD') : 'XAUUSD')
-
     let updatedTrades = [...tr]
     let deltaBal      = 0
 
@@ -136,7 +139,7 @@ export default function WorkspacePage() {
         if (trade.status !== 'open') return trade
         const exitPrice = checkSlTp(trade, candle)
         if (exitPrice !== null) {
-          const pnl = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, sym.contractSize)
+          const pnl = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
           deltaBal += pnl
           return { ...trade, status: 'closed' as const, exit_price: exitPrice, pnl, closed_at_idx: end }
         }
@@ -151,112 +154,109 @@ export default function WorkspacePage() {
       }).eq('id', trade.id)
     }
 
-    const newBal = parseFloat((bal + deltaBal).toFixed(2))
-
-    // Fix 3: account breach
-    if (newBal <= 0) {
-      setBreached(true)
-      // Force-close all remaining open trades
-      const stillOpen = updatedTrades.filter(t => t.status === 'open')
-      for (const trade of stillOpen) {
-        await supabase.from('trades').update({ status: 'closed', exit_price: 0, pnl: 0 }).eq('id', trade.id)
-      }
-      const allClosed = updatedTrades.map(t =>
-        t.status === 'open' ? { ...t, status: 'closed' as const, exit_price: 0, pnl: 0 } : t
-      )
-      setTrades(allClosed)
-      setBalance(0)
-      await supabase.from('sessions').update({ candle_index: end, end_capital: 0 }).eq('id', id)
-      return
-    }
+    const rawBal = bal + deltaBal
+    const newBal = parseFloat(Math.max(0, rawBal).toFixed(2))
+    const breached = rawBal <= 0
 
     setBalance(newBal)
     setTrades(updatedTrades)
     setIdx(end)
+    if (breached) setAccountBreached(true)
 
     await supabase.from('sessions').update({
-      candle_index: end, end_capital: newBal, is_completed: end >= c.length,
+      candle_index: end, end_capital: newBal, is_completed: end >= c.length || breached,
     }).eq('id', id)
-  }, [id, supabase, session])
+  }, [id, supabase])
 
+  // ── Fix 4 & 5: execTrade with PnL fix + SL/TP validation ────────
   async function execTrade(side: 'buy' | 'sell') {
-    // Fix 3: block trading if breached
-    if (breached) return
-
+    if (accountBreached) return
     const { candles: c, idx: i } = stateRef.current
     const cur = c[i - 1]
     if (!cur || !session) return
 
-    const sym   = getSymbol(session.symbol)
     const entry = cur.close
-    const parsedSl = slVal ? parseFloat(slVal) : null
-    const parsedTp = tpVal ? parseFloat(tpVal) : null
 
-    // Fix 5: validate SL/TP direction
-    if (parsedSl !== null && !isValidSL(side, entry, parsedSl)) {
-      alert(side === 'buy'
-        ? 'Stop Loss must be below entry price for a Buy order.'
-        : 'Stop Loss must be above entry price for a Sell order.')
-      return
+    // Fix 5: validate SL
+    if (slVal) {
+      const sl = parseFloat(slVal)
+      if (!isNaN(sl)) {
+        if (side === 'buy'  && sl >= entry) { setSlError('SL must be below entry for a buy'); return }
+        if (side === 'sell' && sl <= entry) { setSlError('SL must be above entry for a sell'); return }
+      }
     }
-    if (parsedTp !== null && !isValidTP(side, entry, parsedTp)) {
-      alert(side === 'buy'
-        ? 'Take Profit must be above entry price for a Buy order.'
-        : 'Take Profit must be below entry price for a Sell order.')
-      return
+    setSlError('')
+
+    // Fix 5: validate TP
+    if (tpVal) {
+      const tp = parseFloat(tpVal)
+      if (!isNaN(tp)) {
+        if (side === 'buy'  && tp <= entry) { setTpError('TP must be above entry for a buy'); return }
+        if (side === 'sell' && tp >= entry) { setTpError('TP must be below entry for a sell'); return }
+      }
     }
+    setTpError('')
 
     const day = WEEKDAYS[new Date().getDay() - 1] ?? WEEKDAYS[0]
     const { data } = await supabase.from('trades').insert({
       session_id: id, user_id: user!.id, side,
       entry_price: entry,
       quantity: parseFloat(qty) || 0.1,
-      stop_loss:   parsedSl,
-      take_profit: parsedTp,
+      stop_loss:   slVal ? parseFloat(slVal)  : null,
+      take_profit: tpVal ? parseFloat(tpVal)  : null,
       status: 'open', opened_at_idx: i, weekday: day,
     }).select().single()
     if (data) setTrades(prev => [...prev, data as Trade])
   }
 
+  // ── Fix 3 & 4: closeTrade with correct PnL + breach check ────────
   async function closeTrade(tradeId: string) {
     const { candles: c, idx: i, balance: bal } = stateRef.current
     const cur   = c[i - 1]
     const trade = stateRef.current.trades.find(t => t.id === tradeId)
     if (!cur || !trade) return
-    const sym    = getSymbol(session?.symbol ?? 'XAUUSD')
-    const pnl    = calcPnl(trade.side, trade.entry_price, cur.close, trade.quantity, sym.contractSize)
-    const newBal = parseFloat((bal + pnl).toFixed(2))
+    const cs     = symRef.current.contractSize
+    const pnl    = calcPnl(trade.side, trade.entry_price, cur.close, trade.quantity, cs)
+    const rawBal = bal + pnl
+    const newBal = parseFloat(Math.max(0, rawBal).toFixed(2))
+    const breached = rawBal <= 0
+
     await supabase.from('trades').update({
       status: 'closed', exit_price: cur.close, pnl, closed_at_idx: i,
     }).eq('id', tradeId)
     await supabase.from('sessions').update({ end_capital: newBal }).eq('id', id)
+
     setTrades(prev => prev.map(t =>
       t.id === tradeId ? { ...t, status: 'closed' as const, exit_price: cur.close, pnl, closed_at_idx: i } : t
     ))
     setBalance(newBal)
-
-    // Fix 3: check breach after manual close
-    if (newBal <= 0) setBreached(true)
+    if (breached) setAccountBreached(true)
   }
 
+  // ── Fix 5: handleSetSL with direction validation ─────────────────
   const handleSetSL = async (tradeId: string, price: number) => {
-    const val = price === 0 ? null : price
-    // Fix 5: validate direction
-    if (val !== null) {
+    if (price !== 0) {
       const trade = stateRef.current.trades.find(t => t.id === tradeId)
-      if (trade && !isValidSL(trade.side, trade.entry_price, val)) return
+      if (trade) {
+        if (trade.side === 'buy'  && price >= trade.entry_price) return
+        if (trade.side === 'sell' && price <= trade.entry_price) return
+      }
     }
+    const val = price === 0 ? null : parseFloat(price.toFixed(symRef.current.decimals))
     await supabase.from('trades').update({ stop_loss: val }).eq('id', tradeId)
     setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, stop_loss: val } : t))
   }
 
+  // ── Fix 5: handleSetTP with direction validation ─────────────────
   const handleSetTP = async (tradeId: string, price: number) => {
-    const val = price === 0 ? null : price
-    // Fix 5: validate direction
-    if (val !== null) {
+    if (price !== 0) {
       const trade = stateRef.current.trades.find(t => t.id === tradeId)
-      if (trade && !isValidTP(trade.side, trade.entry_price, val)) return
+      if (trade) {
+        if (trade.side === 'buy'  && price <= trade.entry_price) return
+        if (trade.side === 'sell' && price >= trade.entry_price) return
+      }
     }
+    const val = price === 0 ? null : parseFloat(price.toFixed(symRef.current.decimals))
     await supabase.from('trades').update({ take_profit: val }).eq('id', tradeId)
     setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, take_profit: val } : t))
   }
@@ -270,7 +270,7 @@ export default function WorkspacePage() {
     )
   }
 
-  const sym      = getSymbol(session.symbol)
+  const sym      = symRef.current
   const cur      = candles[idx - 1]
   const done     = idx >= candles.length
   const openTr   = trades.filter(t => t.status === 'open')
@@ -284,9 +284,9 @@ export default function WorkspacePage() {
     const tzInfo = TIMEZONES.find(tz => tz.value === tzValue)
     if (!tzInfo) return new Date(timestamp * 1000).toLocaleString('en-GB')
     const utcDate = new Date(timestamp * 1000)
-    const tzDate  = new Date(utcDate.getTime() + tzInfo.offset * 3600000)
+    const tzDate  = new Date(utcDate.getTime() + tzInfo.offset * 3600 * 1000)
     return tzDate.toLocaleString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit',
     })
   }
 
@@ -297,8 +297,8 @@ export default function WorkspacePage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-primary)'}}>
 
-      {/* ── Account Breach Modal ── */}
-      {breached && (
+      {/* ── Fix 3: Account Breached Modal ── */}
+      {accountBreached && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: 'rgba(0,0,0,0.75)',
@@ -306,43 +306,39 @@ export default function WorkspacePage() {
         }}>
           <div style={{
             background: 'var(--bg-secondary)',
-            border: '1px solid var(--red)',
+            border: '2px solid #ef4444',
             borderRadius: 16,
-            padding: '40px 48px',
+            padding: '2.5rem 2rem',
+            maxWidth: 380,
             textAlign: 'center',
-            maxWidth: 420,
             boxShadow: '0 8px 40px rgba(239,68,68,0.3)',
           }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>💥</div>
-            <h2 style={{ color: 'var(--red)', fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
+            <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 16 }}>💥</div>
+            <h2 style={{ color: '#ef4444', fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>
               Account Breached
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              Your balance has reached $0. All positions have been closed.
-              You cannot place new trades in this session.
+            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24, lineHeight: 1.6 }}>
+              Your balance has reached $0.<br/>You have blown your account.
             </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button
                 onClick={() => router.push('/dashboard/sessions')}
                 style={{
-                  background: 'var(--red)', color: '#fff',
-                  border: 'none', borderRadius: 8,
-                  padding: '10px 24px', fontWeight: 700,
-                  fontSize: 14, cursor: 'pointer',
-                }}
-              >
+                  background: '#ef4444', color: '#fff', border: 'none',
+                  borderRadius: 8, padding: '10px 20px', fontWeight: 700,
+                  cursor: 'pointer', fontSize: 14,
+                }}>
                 Back to Sessions
               </button>
               <button
-                onClick={() => setBreached(false)}
+                onClick={() => setAccountBreached(false)}
                 style={{
-                  background: 'transparent', color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-default)', borderRadius: 8,
-                  padding: '10px 24px', fontWeight: 600,
-                  fontSize: 14, cursor: 'pointer',
-                }}
-              >
-                View Chart
+                  background: 'transparent', color: 'var(--text-muted)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 8, padding: '10px 20px', fontWeight: 600,
+                  cursor: 'pointer', fontSize: 14,
+                }}>
+                Dismiss
               </button>
             </div>
           </div>
@@ -383,7 +379,7 @@ export default function WorkspacePage() {
         <div className="ml-auto flex items-center gap-4 shrink-0">
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>{t('balance')}</p>
-            <p className="font-mono font-bold text-base" style={{color: balance <= 0 ? 'var(--red)' : 'var(--accent)'}}>{fmtMoney(balance)}</p>
+            <p className="font-mono font-bold text-base" style={{color:'var(--accent)'}}>{fmtMoney(balance)}</p>
           </div>
           {openPnl !== 0 && (
             <div className="text-right">
@@ -414,10 +410,10 @@ export default function WorkspacePage() {
             />
           </div>
 
-          {/* Controls */}
+          {/* Candle controls */}
           <div className="flex items-center gap-3 px-4 py-2.5 shrink-0 flex-wrap"
             style={{borderTop:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
-            <button onClick={() => advance(1)} disabled={done || breached}
+            <button onClick={() => advance(1)} disabled={done || accountBreached}
               className="px-4 py-2 font-bold text-sm rounded-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               style={{background:'var(--accent)'}}>
               {t('nextCandle')}
@@ -430,7 +426,7 @@ export default function WorkspacePage() {
                 {SKIP_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
               <span className="text-xs" style={{color:'var(--text-muted)'}}>{t('candles')}</span>
-              <button onClick={() => advance(skipVal)} disabled={done || breached}
+              <button onClick={() => advance(skipVal)} disabled={done || accountBreached}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{border:'1px solid var(--border-default)', color:'var(--text-secondary)'}}>
                 →
@@ -444,7 +440,7 @@ export default function WorkspacePage() {
                 {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
               </select>
             </div>
-            {done && (
+            {done && !accountBreached && (
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{background:'var(--accent-muted)', color:'var(--accent)', border:'1px solid var(--accent-border)'}}>
                 {t('allCandlesRevealed')}
@@ -547,6 +543,7 @@ export default function WorkspacePage() {
         <div className="w-52 shrink-0 flex flex-col gap-3 overflow-y-auto p-3"
           style={{borderLeft:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
 
+          {/* Price card */}
           <div className="rounded-xl p-4" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
             <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('currentPrice')}</p>
             <p className="font-mono text-xl font-bold" style={{color:'var(--accent)'}}>
@@ -564,38 +561,61 @@ export default function WorkspacePage() {
             </div>
           </div>
 
-          {/* Trade panel — disabled when breached */}
-          <div className="rounded-xl p-4 flex flex-col gap-3"
-            style={{
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-subtle)',
-              opacity: breached ? 0.5 : 1,
-              pointerEvents: breached ? 'none' : 'auto',
-            }}>
-            {[
-              {label:t('quantity'),   val:qty,   setVal:setQty,   step:'0.01', min:'0.01', focusColor:'var(--accent)'},
-              {label:t('stopLoss'),   val:slVal, setVal:setSlVal, step:'0.1',  focusColor:'var(--red)'},
-              {label:t('takeProfit'), val:tpVal, setVal:setTpVal, step:'0.1',  focusColor:'var(--green)'},
-            ].map(f => (
-              <div key={f.label}>
-                <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{f.label}</p>
-                <input type="number" value={f.val} step={f.step} min={f.min}
-                  onChange={e=>f.setVal(e.target.value)}
-                  className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
-                  style={{background:'var(--bg-primary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}
-                  onFocus={e=>{e.currentTarget.style.borderColor=f.focusColor}}
-                  onBlur={e=>{e.currentTarget.style.borderColor='var(--border-default)'}}
-                />
-              </div>
-            ))}
+          {/* Trade panel */}
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
+            {/* Quantity */}
+            <div>
+              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('quantity')}</p>
+              <input type="number" value={qty} step="0.01" min="0.01"
+                onChange={e=>setQty(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
+                style={{background:'var(--bg-primary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}
+                onFocus={e=>{e.currentTarget.style.borderColor='var(--accent)'}}
+                onBlur={e=>{e.currentTarget.style.borderColor='var(--border-default)'}}
+              />
+            </div>
+            {/* Stop Loss */}
+            <div>
+              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('stopLoss')} <span style={{color:'var(--text-muted)', fontWeight:400}}>(optional)</span></p>
+              <input type="number" value={slVal} step="0.1"
+                onChange={e=>{ setSlVal(e.target.value); setSlError('') }}
+                placeholder="—"
+                className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
+                style={{
+                  background:'var(--bg-primary)',
+                  border: slError ? '1px solid var(--red)' : '1px solid var(--border-default)',
+                  color:'var(--text-primary)',
+                }}
+                onFocus={e=>{e.currentTarget.style.borderColor='var(--red)'}}
+                onBlur={e=>{e.currentTarget.style.borderColor=slError?'var(--red)':'var(--border-default)'}}
+              />
+              {slError && <p style={{color:'var(--red)', fontSize:10, marginTop:3}}>{slError}</p>}
+            </div>
+            {/* Take Profit */}
+            <div>
+              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('takeProfit')} <span style={{color:'var(--text-muted)', fontWeight:400}}>(optional)</span></p>
+              <input type="number" value={tpVal} step="0.1"
+                onChange={e=>{ setTpVal(e.target.value); setTpError('') }}
+                placeholder="—"
+                className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
+                style={{
+                  background:'var(--bg-primary)',
+                  border: tpError ? '1px solid var(--red)' : '1px solid var(--border-default)',
+                  color:'var(--text-primary)',
+                }}
+                onFocus={e=>{e.currentTarget.style.borderColor='var(--green)'}}
+                onBlur={e=>{e.currentTarget.style.borderColor=tpError?'var(--red)':'var(--border-default)'}}
+              />
+              {tpError && <p style={{color:'var(--red)', fontSize:10, marginTop:3}}>{tpError}</p>}
+            </div>
             <div className="flex flex-col gap-2 pt-1">
-              <button onClick={() => execTrade('buy')}
-                className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98]"
+              <button onClick={() => execTrade('buy')} disabled={accountBreached}
+                className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{background:'var(--green)'}}>
                 {t('buy')}
               </button>
-              <button onClick={() => execTrade('sell')}
-                className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98]"
+              <button onClick={() => execTrade('sell')} disabled={accountBreached}
+                className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{background:'var(--red)'}}>
                 {t('sell')}
               </button>

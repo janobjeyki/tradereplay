@@ -20,25 +20,31 @@ interface Props {
   onCloseTrade?: (tradeId: string) => void
 }
 
+// Colours matching TradingView paper-trading
 const TV_ENTRY_BUY  = '#2962ff'
 const TV_ENTRY_SELL = '#ef5350'
-const TV_TP         = '#0d9488'
-const TV_SL         = '#f59e0b'
+const TV_TP         = '#0d9488'   // teal
+const TV_SL         = '#f59e0b'   // amber
+
+type DragType = 'sl' | 'tp' | 'entry'
 
 export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, onCloseTrade }: Props) {
-  const containerRef   = useRef<HTMLDivElement>(null)
-  const chartRef       = useRef<any>(null)
-  const seriesRef      = useRef<any>(null)
-  const priceLines     = useRef<Map<string, any>>(new Map())
-  const initializedRef = useRef(false)
-  // type includes 'entry' for drag-to-create TP/SL
-  const draggingRef    = useRef<{ tradeId: string; type: 'sl' | 'tp' | 'entry' } | null>(null)
-  const { theme }      = useTheme()
+  const containerRef    = useRef<HTMLDivElement>(null)
+  const chartRef        = useRef<any>(null)
+  const seriesRef       = useRef<any>(null)
+  const priceLines      = useRef<Map<string, any>>(new Map())
+  const initializedRef  = useRef(false)
+  const draggingRef     = useRef<{ tradeId: string; type: DragType } | null>(null)
+  const draggingPriceRef= useRef<number | null>(null)
+  const { theme }       = useTheme()
   const [cursorStyle, setCursorStyle] = useState('default')
   const [linePos, setLinePos]         = useState<Map<string, LineYPositions>>(new Map())
-  const rafRef        = useRef<number>(0)
-  const openTradesRef = useRef<Trade[]>(openTrades)
-  const prevPosRef    = useRef<Map<string, LineYPositions>>(new Map())
+  const rafRef          = useRef<number>(0)
+  const openTradesRef   = useRef<Trade[]>(openTrades)
+  const prevPosRef      = useRef<Map<string, LineYPositions>>(new Map())
+
+  // Fix 6: temp line shown while dragging from entry line to create SL/TP
+  const [dragLine, setDragLine] = useState<{ y: number; isTP: boolean } | null>(null)
 
   useEffect(() => { openTradesRef.current = openTrades }, [openTrades])
 
@@ -51,16 +57,25 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     }
   }, [theme])
 
+  // Sync Y positions — uses draggingPriceRef so overlay tracks live during drag
   const syncPositions = useCallback(() => {
     if (!seriesRef.current) return
     const next = new Map<string, LineYPositions>()
+    const drag = draggingRef.current
+
     for (const tr of openTradesRef.current) {
+      const isDragSL = drag?.tradeId === tr.id && drag?.type === 'sl'
+      const isDragTP = drag?.tradeId === tr.id && drag?.type === 'tp'
+      const slPrice  = isDragSL && draggingPriceRef.current != null ? draggingPriceRef.current : tr.stop_loss
+      const tpPrice  = isDragTP && draggingPriceRef.current != null ? draggingPriceRef.current : tr.take_profit
+
       next.set(tr.id, {
         entryY: seriesRef.current.priceToCoordinate(tr.entry_price) ?? null,
-        slY:    tr.stop_loss   ? (seriesRef.current.priceToCoordinate(tr.stop_loss)   ?? null) : null,
-        tpY:    tr.take_profit ? (seriesRef.current.priceToCoordinate(tr.take_profit) ?? null) : null,
+        slY:    slPrice ? (seriesRef.current.priceToCoordinate(slPrice) ?? null) : null,
+        tpY:    tpPrice ? (seriesRef.current.priceToCoordinate(tpPrice) ?? null) : null,
       })
     }
+
     let changed = next.size !== prevPosRef.current.size
     if (!changed) {
       for (const [id, pos] of next) {
@@ -79,6 +94,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     }
   }, [])
 
+  // ── Initialize chart ─────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || initializedRef.current) return
 
@@ -101,9 +117,17 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
             scaleMargins: { top: 0.1, bottom: 0.1 },
             autoScale: true,
           },
-          // Disable price-axis drag scaling — users should only drag on chart
+          // Fix 2: disable price-axis drag so SL/TP can't be moved from axis
           handleScale: {
-            axisPressedMouseMove: { time: true, price: false },
+            axisPressedMouseMove: { price: false, time: true },
+            mouseWheel: true,
+            pinch: true,
+          },
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: false,
           },
           timeScale: {
             borderColor:    c.border,
@@ -136,20 +160,23 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
 
         const el = containerRef.current!
 
-        // ── Use capture:true so we intercept BEFORE chart's own pan handler ──
+        // ── Fix 2: capture phase intercepts before chart panning starts ──
         const onMouseDown = (e: MouseEvent) => {
           if (!seriesRef.current) return
           const rect = el.getBoundingClientRect()
           const y    = e.clientY - rect.top
 
-          // Check entry lines first (drag to create TP/SL)
+          // Check entry lines first (Fix 6: drag entry to create SL/TP)
           for (const tr of openTradesRef.current) {
-            const entryCoord = seriesRef.current.priceToCoordinate(tr.entry_price)
-            if (entryCoord != null && Math.abs(entryCoord - y) < 10) {
-              draggingRef.current = { tradeId: tr.id, type: 'entry' }
+            const entryY = seriesRef.current.priceToCoordinate(tr.entry_price)
+            if (entryY != null && Math.abs(entryY - y) < 10) {
+              draggingRef.current  = { tradeId: tr.id, type: 'entry' }
+              draggingPriceRef.current = tr.entry_price
               setCursorStyle('ns-resize')
-              e.preventDefault()
               e.stopPropagation()
+              e.preventDefault()
+              // Disable chart panning while we drag
+              chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
               return
             }
           }
@@ -164,10 +191,12 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
             if (!price) continue
             const coord = seriesRef.current.priceToCoordinate(price)
             if (coord != null && Math.abs(coord - y) < 10) {
-              draggingRef.current = { tradeId, type: type as 'sl' | 'tp' }
+              draggingRef.current      = { tradeId, type: type as DragType }
+              draggingPriceRef.current = price
               setCursorStyle('ns-resize')
-              e.preventDefault()
               e.stopPropagation()
+              e.preventDefault()
+              chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
               return
             }
           }
@@ -181,16 +210,31 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
           const newPrice = seriesRef.current.coordinateToPrice(y)
           if (newPrice == null || !Number.isFinite(newPrice)) return
 
-          // For SL/TP dragging, update the lightweight-chart price line live
-          if (draggingRef.current.type !== 'entry') {
-            const line = priceLines.current.get(
-              `${draggingRef.current.tradeId}:${draggingRef.current.type}`
-            )
+          const { tradeId, type } = draggingRef.current
+
+          if (type === 'sl' || type === 'tp') {
+            // Move the actual chart price line and update overlay via draggingPriceRef
+            draggingPriceRef.current = newPrice
+            const line = priceLines.current.get(`${tradeId}:${type}`)
             if (line) line.applyOptions({ price: newPrice })
+          } else if (type === 'entry') {
+            // Fix 6: show temp line indicating where SL/TP will be set
+            draggingPriceRef.current = newPrice
+            const trade = openTradesRef.current.find(t => t.id === tradeId)
+            if (trade) {
+              const isBuy   = trade.side === 'buy'
+              const isAbove = newPrice > trade.entry_price
+              // buy + above entry = TP; buy + below = SL; sell inverted
+              const isTP = (isBuy && isAbove) || (!isBuy && !isAbove)
+              setDragLine({ y, isTP })
+            }
           }
         }
 
         const onMouseUp = () => {
+          // Re-enable chart panning
+          chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true } })
+
           if (!draggingRef.current || !seriesRef.current) return
           const rect       = el.getBoundingClientRect()
           const y          = ((window as any).__lastMouseY ?? 0) - rect.top
@@ -199,33 +243,33 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
           if (finalPrice != null && Number.isFinite(finalPrice)) {
             const { tradeId, type } = draggingRef.current
 
-            if (type === 'sl' && onSetSL) {
-              onSetSL(tradeId, finalPrice)
-            } else if (type === 'tp' && onSetTP) {
-              onSetTP(tradeId, finalPrice)
+            if (type === 'sl') {
+              onSetSL?.(tradeId, finalPrice)
+            } else if (type === 'tp') {
+              onSetTP?.(tradeId, finalPrice)
             } else if (type === 'entry') {
-              // Drag entry line → create TP above / SL below (for buy), reversed for sell
+              // Fix 6: commit SL or TP depending on drag direction
               const trade = openTradesRef.current.find(t => t.id === tradeId)
-              if (trade) {
-                const isBuy = trade.side === 'buy'
-                if (isBuy) {
-                  if (finalPrice > trade.entry_price) onSetTP?.(tradeId, finalPrice)
-                  else                                onSetSL?.(tradeId, finalPrice)
-                } else {
-                  if (finalPrice < trade.entry_price) onSetTP?.(tradeId, finalPrice)
-                  else                                onSetSL?.(tradeId, finalPrice)
-                }
+              if (trade && Math.abs(finalPrice - trade.entry_price) > 0.001) {
+                const isBuy   = trade.side === 'buy'
+                const isAbove = finalPrice > trade.entry_price
+                const isTP    = (isBuy && isAbove) || (!isBuy && !isAbove)
+                if (isTP) onSetTP?.(tradeId, finalPrice)
+                else       onSetSL?.(tradeId, finalPrice)
               }
             }
           }
-          draggingRef.current = null
+
+          draggingRef.current      = null
+          draggingPriceRef.current = null
+          setDragLine(null)
           setCursorStyle('default')
         }
 
-        // capture:true → fires before chart's own listeners
+        // Fix 2: capture:true so we intercept before lightweight-charts handles it
         el.addEventListener('mousedown', onMouseDown, { capture: true })
         document.addEventListener('mousemove', onMouseMove)
-        document.addEventListener('mouseup', onMouseUp)
+        document.addEventListener('mouseup',   onMouseUp)
 
         if (candles.length > 0) {
           series.setData(candles.map(c => ({
@@ -268,6 +312,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Theme ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!chartRef.current) return
     const c = getColors()
@@ -279,6 +324,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     })
   }, [theme, getColors])
 
+  // ── Candles ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!seriesRef.current || !candles.length) return
     seriesRef.current.setData(
@@ -286,6 +332,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     )
   }, [candles])
 
+  // ── Price lines ──────────────────────────────────────────────────
   useEffect(() => {
     if (!seriesRef.current) return
     for (const line of priceLines.current.values()) {
@@ -300,7 +347,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
 
         try {
           priceLines.current.set(`${tr.id}:entry`, seriesRef.current.createPriceLine({
-            price: tr.entry_price, color: entryColor,
+            price: tr.entry_price,
+            color: entryColor,
             lineWidth: 1, lineStyle: LineStyle.Solid,
             axisLabelVisible: true, title: '',
           }))
@@ -309,7 +357,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
         if (tr.stop_loss) {
           try {
             priceLines.current.set(`${tr.id}:sl`, seriesRef.current.createPriceLine({
-              price: tr.stop_loss, color: TV_SL,
+              price: tr.stop_loss,
+              color: TV_SL,
               lineWidth: 1, lineStyle: LineStyle.Dashed,
               axisLabelVisible: true, title: '',
             }))
@@ -319,7 +368,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
         if (tr.take_profit) {
           try {
             priceLines.current.set(`${tr.id}:tp`, seriesRef.current.createPriceLine({
-              price: tr.take_profit, color: TV_TP,
+              price: tr.take_profit,
+              color: TV_TP,
               lineWidth: 1, lineStyle: LineStyle.Dashed,
               axisLabelVisible: true, title: '',
             }))
@@ -330,7 +380,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     })
   }, [openTrades, syncPositions])
 
-  // Cursor: show ns-resize when near any draggable line
+  // ── Cursor: change to ns-resize when hovering near any draggable line ──
   useEffect(() => {
     if (!containerRef.current) return
     const el = containerRef.current
@@ -341,9 +391,9 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
       let near   = false
 
       // Check entry lines
-      for (const tr of openTradesRef.current) {
-        const coord = seriesRef.current.priceToCoordinate(tr.entry_price)
-        if (coord != null && Math.abs(coord - y) < 8) { near = true; break }
+      for (const tr of openTrades) {
+        const entryY = seriesRef.current.priceToCoordinate(tr.entry_price)
+        if (entryY != null && Math.abs(entryY - y) < 10) { near = true; break }
       }
 
       // Check SL/TP lines
@@ -356,9 +406,10 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
           const price = type === 'sl' ? trade.stop_loss : trade.take_profit
           if (!price) continue
           const ly = seriesRef.current.priceToCoordinate(price)
-          if (ly != null && Math.abs(ly - y) < 8) { near = true; break }
+          if (ly != null && Math.abs(ly - y) < 10) { near = true; break }
         }
       }
+
       setCursorStyle(near ? 'ns-resize' : 'default')
     }
     el.addEventListener('mousemove', onMove)
@@ -374,7 +425,22 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
         style={{ width: '100%', height: '100%', display: 'block', cursor: cursorStyle }}
       />
 
+      {/* Overlay */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+
+        {/* Fix 6: temp dashed line while dragging from entry line */}
+        {dragLine && (
+          <div style={{
+            position:  'absolute',
+            top:       dragLine.y,
+            left:      0,
+            right:     72,
+            height:    0,
+            borderTop: `2px dashed ${dragLine.isTP ? TV_TP : TV_SL}`,
+            opacity:   0.7,
+          }} />
+        )}
+
         {openTrades.map(trade => {
           const pos = linePos.get(trade.id)
           if (!pos) return null
@@ -393,7 +459,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
           return (
             <div key={trade.id}>
 
-              {/* Entry widget */}
+              {/* Entry line widget */}
               {pos.entryY != null && pos.entryY > 4 && (
                 <LineWidget top={pos.entryY}>
                   <div style={{
@@ -404,7 +470,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
                     whiteSpace: 'nowrap', userSelect: 'none',
                     boxShadow: '0 1px 5px rgba(0,0,0,0.45)',
                   }}>
-                    <span style={{ opacity: 0.7, fontSize: 10 }} title="Drag to set TP or SL">⇅</span>
+                    {/* Drag hint */}
+                    <span style={{ opacity: 0.7, fontSize: 10, cursor: 'ns-resize' }} title="Drag to set SL/TP">⇅</span>
                     <TvPillBtn label="TP" onClick={() => onSetTP?.(trade.id, lastPrice + (isBuy ? 5 : -5))} />
                     <TvPillBtn label="SL" onClick={() => onSetSL?.(trade.id, lastPrice + (isBuy ? -5 : 5))} />
                     <span style={{ opacity: 0.9 }}>{isBuy ? '+' : '−'}{trade.quantity}</span>
@@ -416,7 +483,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
                 </LineWidget>
               )}
 
-              {/* SL widget – amber */}
+              {/* SL line widget – amber */}
               {pos.slY != null && pos.slY > 4 && trade.stop_loss && slPnl != null && (
                 <LineWidget top={pos.slY}>
                   <div style={{
@@ -436,7 +503,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
                 </LineWidget>
               )}
 
-              {/* TP widget – teal */}
+              {/* TP line widget – teal */}
               {pos.tpY != null && pos.tpY > 4 && trade.take_profit && tpPnl != null && (
                 <LineWidget top={pos.tpY}>
                   <div style={{
@@ -464,11 +531,18 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
   )
 }
 
+// ── Sub-components ───────────────────────────────────────────────
+
 function LineWidget({ top, children }: { top: number; children: React.ReactNode }) {
   return (
     <div style={{
-      position: 'absolute', top: top - 12, left: 8, height: 24,
-      display: 'flex', alignItems: 'center', pointerEvents: 'auto',
+      position: 'absolute',
+      top: top - 12,
+      left: 8,
+      height: 24,
+      display: 'flex',
+      alignItems: 'center',
+      pointerEvents: 'auto',
     }}>
       {children}
     </div>
