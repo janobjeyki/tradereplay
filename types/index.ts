@@ -66,6 +66,7 @@ export interface Symbol {
   volatility: number
   decimals: number
   pipSize: number
+  contractSize: number  // units per standard lot (forex=100000, gold=100, indices=10)
 }
 
 export type Language = 'en' | 'ru' | 'uz'

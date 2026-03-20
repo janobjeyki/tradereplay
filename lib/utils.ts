@@ -21,8 +21,19 @@ export function generateCandles(count: number, basePrice: number, volatility: nu
 }
 
 // ── P&L calculation ──────────────────────────────────────────────
-export function calcPnl(side: 'buy' | 'sell', entry: number, exit: number, qty: number): number {
-  const raw = (side === 'buy' ? exit - entry : entry - exit) * qty * 100000
+// contractSize: units per standard lot
+//   forex  = 100,000  (e.g. EURUSD, GBPUSD)
+//   gold   = 100      (XAUUSD — 100 troy oz / lot)
+//   silver = 5,000    (XAGUSD)
+//   index  = 10       ($10 per point per lot)
+export function calcPnl(
+  side: 'buy' | 'sell',
+  entry: number,
+  exit: number,
+  qty: number,
+  contractSize = 100000,
+): number {
+  const raw = (side === 'buy' ? exit - entry : entry - exit) * qty * contractSize
   return parseFloat(raw.toFixed(2))
 }
 
@@ -40,7 +51,6 @@ export function computeStats(trades: Trade[], startCapital: number): SessionStat
   const avgL = losses.length ? grossLoss / losses.length : 1
   const rr  = avgL === 0 ? avgW : avgW / avgL
 
-  // Equity curve
   let bal = startCapital
   const equity: EquityPoint[] = [{ index: 0, value: startCapital }]
   closed.forEach((tr, i) => {
@@ -48,7 +58,6 @@ export function computeStats(trades: Trade[], startCapital: number): SessionStat
     equity.push({ index: i + 1, value: parseFloat(bal.toFixed(2)) })
   })
 
-  // By weekday
   const byDay: Record<string, DayStats> = {}
   WEEKDAYS.forEach(d => { byDay[d] = { pnl: 0, wins: 0, total: 0 } })
   closed.forEach(tr => {
