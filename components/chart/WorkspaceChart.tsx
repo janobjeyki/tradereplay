@@ -564,6 +564,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         seriesRef={seriesRef}
         chartRef={chartRef}
         containerRef={containerRef}
+        candles={candles}
         activeTool={activeTool}
         drawings={drawings}
         onAdd={d => onAddDrawing?.(d)}
