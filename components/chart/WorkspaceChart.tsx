@@ -1,9 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from 'react'
 import type { Candle, Trade, Symbol } from '@/types'
 import { useTheme } from '@/contexts/ThemeContext'
 import { calcPnl } from '@/lib/utils'
+import { DrawingLayer } from './DrawingLayer'
+import type { DrawingTool, Drawing } from '@/lib/drawing-types'
+import type { IndicatorConfig } from './IndicatorPanes'
+import { sma, ema, bollingerBands, vwap, toLineSeries } from '@/lib/indicators'
 
 interface LineYPositions {
   entryY: number | null
@@ -11,14 +15,25 @@ interface LineYPositions {
   tpY:    number | null
 }
 
+export interface ChartHandle {
+  chartRef: React.MutableRefObject<any>
+}
+
 interface Props {
   candles:       Candle[]
   openTrades:    Trade[]
   symbol:        Symbol
-  lastPrice?:    number   // real M1 price — stable across TF switches
+  lastPrice?:    number
   onSetSL?:      (tradeId: string, price: number) => void
   onSetTP?:      (tradeId: string, price: number) => void
   onCloseTrade?: (tradeId: string) => void
+  // Drawing tools
+  activeTool?:   DrawingTool
+  drawings?:     Drawing[]
+  onAddDrawing?: (d: Drawing) => void
+  onDelDrawing?: (id: string) => void
+  // Indicators
+  indicatorConfig?: IndicatorConfig
 }
 
 // Colours matching TradingView paper-trading
@@ -29,7 +44,12 @@ const TV_SL         = '#ef4444'   // red (matches SL widget + price line)
 
 type DragType = 'sl' | 'tp' | 'entry'
 
-export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade }: Props) {
+export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
+  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade,
+    activeTool = null, drawings = [], onAddDrawing, onDelDrawing,
+    indicatorConfig },
+  ref
+) {
   const containerRef    = useRef<HTMLDivElement>(null)
   const chartRef        = useRef<any>(null)
   const seriesRef       = useRef<any>(null)
@@ -46,6 +66,10 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
 
   // Fix 6: temp line shown while dragging from entry line to create SL/TP
   const [dragLine, setDragLine] = useState<{ y: number; isTP: boolean } | null>(null)
+  // Chart size for drawing layer
+  const [chartSize, setChartSize] = useState({ w: 0, h: 0 })
+  // Expose chartRef to parent
+  useImperativeHandle(ref, () => ({ chartRef: chartRef }))
 
   useEffect(() => { openTradesRef.current = openTrades }, [openTrades])
 
@@ -300,6 +324,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
         if (width > 0 && height > 0) {
           if (!initializedRef.current) initChart(width, height)
           else chartRef.current?.resize(width, height)
+          setChartSize({ w: width, h: height })
         }
       }
     })
@@ -457,6 +482,86 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
     return () => el.removeEventListener('mousemove', onMove)
   }, [openTrades])
 
+  // ── Indicator overlay series ──────────────────────────────────────
+  const indicatorSeriesRef = useRef<Map<string, any>>(new Map())
+  useEffect(() => {
+    if (!seriesRef.current || !candles.length || !indicatorConfig) return
+    import('lightweight-charts').then(({ LineStyle }) => {
+      if (!seriesRef.current || !chartRef.current) return
+      const ic = indicatorConfig
+      const existing = indicatorSeriesRef.current
+
+      const ensureLine = (key: string, color: string, width = 1, dashed = false) => {
+        if (!existing.has(key)) {
+          const s = chartRef.current.addLineSeries({
+            color, lineWidth: width,
+            lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+            priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+          })
+          existing.set(key, s)
+        }
+        return existing.get(key)
+      }
+      const removeLine = (key: string) => {
+        if (existing.has(key)) {
+          try { chartRef.current?.removeSeries(existing.get(key)) } catch {}
+          existing.delete(key)
+        }
+      }
+
+      // SMA
+      if (ic.sma?.enabled) {
+        ic.sma.lines.forEach((line: any) => {
+          const key = `sma_${line.period}`
+          const s = ensureLine(key, line.color, 1)
+          s.setData(toLineSeries(candles, sma(candles, line.period)))
+        })
+      } else {
+        ['sma_9','sma_20','sma_50','sma_200'].forEach(k => removeLine(k))
+      }
+
+      // EMA
+      if (ic.ema?.enabled) {
+        ic.ema.lines.forEach((line: any) => {
+          const key = `ema_${line.period}`
+          const s = ensureLine(key, line.color, 1)
+          s.setData(toLineSeries(candles, ema(candles, line.period)))
+        })
+      } else {
+        ['ema_9','ema_20','ema_50','ema_200'].forEach(k => removeLine(k))
+      }
+
+      // Bollinger Bands
+      if (ic.bb?.enabled) {
+        const bb = bollingerBands(candles, ic.bb.period, ic.bb.mult)
+        const upper  = ensureLine('bb_upper',  '#a78bfa', 1, true)
+        const middle = ensureLine('bb_middle', '#a78bfa', 1)
+        const lower  = ensureLine('bb_lower',  '#a78bfa', 1, true)
+        upper.setData(candles.map((c, i) => ({ time: c.time as any, value: bb[i].upper })).filter(d => d.value !== null))
+        middle.setData(candles.map((c, i) => ({ time: c.time as any, value: bb[i].middle })).filter(d => d.value !== null))
+        lower.setData(candles.map((c, i) => ({ time: c.time as any, value: bb[i].lower })).filter(d => d.value !== null))
+      } else {
+        ['bb_upper','bb_middle','bb_lower'].forEach(k => removeLine(k))
+      }
+
+      // VWAP
+      if (ic.vwap?.enabled) {
+        const s = ensureLine('vwap', '#f59e0b', 1)
+        s.setData(toLineSeries(candles, vwap(candles)))
+      } else {
+        removeLine('vwap')
+      }
+    })
+  }, [candles, indicatorConfig])
+
+  // Coordinate converter for DrawingLayer
+  const coordConverter = useMemo(() => ({
+    priceToY: (p: number) => seriesRef.current?.priceToCoordinate(p) ?? null,
+    timeToX:  (t: number) => chartRef.current?.timeScale().timeToCoordinate(t) ?? null,
+    yToPrice: (y: number) => seriesRef.current?.coordinateToPrice(y) ?? null,
+    xToTime:  (x: number) => chartRef.current?.timeScale().coordinateToTime(x) ?? null,
+  }), [])
+
   // Use prop if provided (stable M1 price), fallback to last candle close
   const lastPrice = lastPriceProp ?? (candles.length > 0 ? candles[candles.length - 1].close : 0)
 
@@ -464,7 +569,16 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100%', display: 'block', cursor: cursorStyle }}
+        style={{ width: '100%', height: '100%', display: 'block', cursor: activeTool ? 'crosshair' : cursorStyle }}
+      />
+      <DrawingLayer
+        width={chartSize.w}
+        height={chartSize.h}
+        activeTool={activeTool}
+        drawings={drawings}
+        coords={coordConverter}
+        onAdd={d => onAddDrawing?.(d)}
+        onDelete={id => onDelDrawing?.(id)}
       />
 
       {/* Overlay */}
@@ -571,7 +685,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
       </div>
     </div>
   )
-}
+})
 
 // ── Sub-components ───────────────────────────────────────────────
 

@@ -13,7 +13,10 @@ import { getSymbol } from '@/data/symbols'
 import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
 import { calcPnl, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
 import { Spinner, Badge, TabBar } from '@/components/ui'
-import { WorkspaceChart } from '@/components/chart/WorkspaceChart'
+import { WorkspaceChart, type ChartHandle } from '@/components/chart/WorkspaceChart'
+import { IndicatorPanes, type IndicatorConfig } from '@/components/chart/IndicatorPanes'
+import type { DrawingTool, Drawing } from '@/lib/drawing-types'
+import { TOOL_LABELS, TOOL_TITLES } from '@/lib/drawing-types'
 
 const SKIP_OPTIONS = [3, 5, 10, 15, 30, 60, 120, 240]
 const WEEKDAYS     = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
@@ -60,6 +63,19 @@ export default function WorkspacePage() {
   const [accountBreached, setAccountBreached] = useState(false)
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
+  const [drawings,        setDrawings]        = useState<Drawing[]>([])
+  const [activeTool,      setActiveTool]      = useState<DrawingTool>(null)
+  const [showIndicators,  setShowIndicators]  = useState(false)
+  const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>({
+    rsi:    { enabled: false, period: 14 },
+    macd:   { enabled: false, fast: 12, slow: 26, signal: 9 },
+    volume: { enabled: false },
+  })
+  const [smaEnabled,  setSmaEnabled]  = useState(false)
+  const [emaEnabled,  setEmaEnabled]  = useState(false)
+  const [bbEnabled,   setBbEnabled]   = useState(false)
+  const [vwapEnabled, setVwapEnabled] = useState(false)
+  const chartHandleRef = useRef<ChartHandle>(null)
 
   // ── Single source of truth: absolute index into originalCandlesRef (M1) ──
   // This is STATE so it triggers re-renders. All derived values (price, time) 
@@ -377,6 +393,21 @@ export default function WorkspacePage() {
 
   const m1Total    = m1All.length
   const m1Playable = m1Total - playableStartIdxRef.current
+
+  // Build overlay indicator config from toggles
+  const overlayIndicatorConfig = {
+    sma:  smaEnabled  ? { enabled: true, lines: [
+      { period: 20,  color: '#f59e0b' },
+      { period: 50,  color: '#3b82f6' },
+      { period: 200, color: '#ef4444' },
+    ]} : { enabled: false, lines: [] },
+    ema:  emaEnabled  ? { enabled: true, lines: [
+      { period: 9,   color: '#a78bfa' },
+      { period: 21,  color: '#60a5fa' },
+    ]} : { enabled: false, lines: [] },
+    bb:   bbEnabled   ? { enabled: true, period: 20, mult: 2 } : { enabled: false, period: 20, mult: 2 },
+    vwap: vwapEnabled ? { enabled: true } : { enabled: false },
+  }
   const progress   = m1Playable > 0
     ? Math.round(Math.max(0, m1AbsIdx - playableStartIdxRef.current) / m1Playable * 100)
     : 0
@@ -466,32 +497,96 @@ export default function WorkspacePage() {
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, minHeight:0 }}>
 
           <div style={{ flex:1, minHeight:0, overflow:'hidden', position:'relative' }}>
-            {/* Fix 7: timeframe picker overlaid on chart top-left */}
-            <div style={{
-              position: 'absolute', top: 8, left: 8, zIndex: 10,
-              display: 'flex', gap: 4,
-            }}>
+            {/* TF picker + Indicator toggle */}
+            <div style={{ position:'absolute', top:8, left:8, zIndex:10, display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
               {TIMEFRAMES.map(tf => (
-                <button
-                  key={tf}
-                  onClick={() => setTimeframe(tf)}
+                <button key={tf} onClick={() => setTimeframe(tf)} style={{
+                  padding:'2px 7px', fontSize:11, borderRadius:4, cursor:'pointer', transition:'all 0.15s',
+                  fontWeight: timeframe===tf ? 700 : 400,
+                  border: timeframe===tf ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                  background: timeframe===tf ? 'var(--accent-muted)' : 'var(--bg-secondary)',
+                  color: timeframe===tf ? 'var(--accent)' : 'var(--text-muted)',
+                }}>{tf.toUpperCase()}</button>
+              ))}
+              <button onClick={() => setShowIndicators(p => !p)} style={{
+                padding:'2px 9px', fontSize:11, borderRadius:4, cursor:'pointer',
+                border: showIndicators ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                background: showIndicators ? 'var(--accent-muted)' : 'var(--bg-secondary)',
+                color: showIndicators ? 'var(--accent)' : 'var(--text-muted)',
+                fontWeight: 600, marginLeft:4,
+              }}>Indicators</button>
+            </div>
+
+            {/* Indicator panel */}
+            {showIndicators && (
+              <div style={{
+                position:'absolute', top:36, left:8, zIndex:20, minWidth:200,
+                background:'var(--bg-secondary)', border:'1px solid var(--border-default)',
+                borderRadius:8, padding:'10px 12px', boxShadow:'0 4px 20px rgba(0,0,0,0.3)',
+                display:'flex', flexDirection:'column', gap:6,
+              }}>
+                <p style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',marginBottom:2,textTransform:'uppercase',letterSpacing:'0.08em'}}>Overlay</p>
+                {[
+                  { label:'SMA (20, 50, 200)', val:smaEnabled,  set:setSmaEnabled  },
+                  { label:'EMA (9, 21)',        val:emaEnabled,  set:setEmaEnabled  },
+                  { label:'Bollinger Bands',    val:bbEnabled,   set:setBbEnabled   },
+                  { label:'VWAP',              val:vwapEnabled, set:setVwapEnabled },
+                ].map(({label,val,set}) => (
+                  <label key={label} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'var(--text-primary)'}}>
+                    <input type="checkbox" checked={val} onChange={e=>set(e.target.checked)}
+                      style={{accentColor:'var(--accent)',width:13,height:13}} />
+                    {label}
+                  </label>
+                ))}
+                <p style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',margin:'4px 0 2px',textTransform:'uppercase',letterSpacing:'0.08em'}}>Sub-pane</p>
+                {[
+                  { label:`RSI (${indicatorConfig.rsi.period})`,    key:'rsi'    as const },
+                  { label:`MACD (${indicatorConfig.macd.fast},${indicatorConfig.macd.slow})`, key:'macd' as const },
+                  { label:'Volume',                                  key:'volume' as const },
+                ].map(({label,key}) => (
+                  <label key={key} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'var(--text-primary)'}}>
+                    <input type="checkbox"
+                      checked={indicatorConfig[key].enabled}
+                      onChange={e=>setIndicatorConfig(prev=>({...prev,[key]:{...prev[key],enabled:e.target.checked}}))}
+                      style={{accentColor:'var(--accent)',width:13,height:13}} />
+                    {label}
+                  </label>
+                ))}
+                <button onClick={()=>setShowIndicators(false)} style={{
+                  marginTop:4,padding:'3px 0',fontSize:11,background:'none',border:'none',
+                  color:'var(--text-muted)',cursor:'pointer',textAlign:'right',
+                }}>Close ×</button>
+              </div>
+            )}
+
+            {/* Drawing toolbar — vertical on left */}
+            <div style={{
+              position:'absolute', top:'50%', left:8, transform:'translateY(-50%)',
+              zIndex:10, display:'flex', flexDirection:'column', gap:3,
+            }}>
+              {(['hline','vline','trendline','rectangle','fibonacci','longpos','shortpos','brush','path'] as NonNullable<DrawingTool>[]).map(tool => (
+                <button key={tool} title={TOOL_TITLES[tool]} onClick={() => setActiveTool(p => p===tool ? null : tool)}
                   style={{
-                    padding: '2px 7px',
-                    fontSize: 11,
-                    fontWeight: timeframe === tf ? 700 : 400,
-                    borderRadius: 4,
-                    border: timeframe === tf ? '1px solid var(--accent)' : '1px solid var(--border-default)',
-                    background: timeframe === tf ? 'var(--accent-muted)' : 'var(--bg-secondary)',
-                    color: timeframe === tf ? 'var(--accent)' : 'var(--text-muted)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {tf.toUpperCase()}
+                    width:30, height:28, borderRadius:5, border:'none', cursor:'pointer',
+                    fontSize:11, fontWeight:700, transition:'all 0.12s',
+                    background: activeTool===tool ? 'var(--accent)' : 'var(--bg-secondary)',
+                    color:      activeTool===tool ? '#fff' : 'var(--text-muted)',
+                    boxShadow:  activeTool===tool ? '0 0 0 1px var(--accent)' : '0 1px 3px rgba(0,0,0,0.2)',
+                  }}>
+                  {TOOL_LABELS[tool]}
                 </button>
               ))}
+              {drawings.length > 0 && (
+                <button title="Clear all drawings" onClick={() => setDrawings([])}
+                  style={{
+                    width:30, height:22, borderRadius:5, border:'1px solid var(--border-default)',
+                    fontSize:9, cursor:'pointer', marginTop:4,
+                    background:'var(--bg-secondary)', color:'var(--red)',
+                  }}>✕</button>
+              )}
             </div>
             <WorkspaceChart
+              ref={chartHandleRef}
               candles={aggregatedCandles.slice(0, displayIdx)}
               openTrades={openTr}
               symbol={sym}
@@ -499,6 +594,11 @@ export default function WorkspacePage() {
               onSetSL={handleSetSL}
               onSetTP={handleSetTP}
               onCloseTrade={closeTrade}
+              activeTool={activeTool}
+              drawings={drawings}
+              onAddDrawing={d => { setDrawings(prev => [...prev, d]); setActiveTool(null) }}
+              onDelDrawing={id => setDrawings(prev => prev.filter(d => d.id !== id))}
+              indicatorConfig={overlayIndicatorConfig as any}
             />
           </div>
 
@@ -540,6 +640,13 @@ export default function WorkspacePage() {
               </select>
             </div>
           </div>
+
+          {/* Indicator sub-panes */}
+          <IndicatorPanes
+            candles={aggregatedCandles.slice(0, displayIdx)}
+            config={indicatorConfig}
+            mainChartRef={chartHandleRef.current?.chartRef ?? { current: null } as any}
+          />
 
           {/* Trades table */}
           <div className="h-48 flex flex-col shrink-0" style={{borderTop:'1px solid var(--border-subtle)'}}>
