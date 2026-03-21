@@ -454,12 +454,12 @@ export default function WorkspacePage() {
 
         {cur && (
           <div className="flex gap-3 ml-1">
-            {([['O',cur.open],['H',cur.high],['L',cur.low],['C',cur.close]] as [string,number][]).map(([lb,v]) => (
+            {([['O',cur.open],['H',cur.high],['L',cur.low],['C', m1Price || cur.close]] as [string,number][]).map(([lb,v]) => (
               <div key={lb} className="flex gap-1 items-baseline">
                 <span className="text-[9px] uppercase leading-none" style={{color:'var(--text-muted)'}}>{lb}</span>
                 <span className="font-mono text-[11px]" style={{color:
                   lb==='H' ? 'var(--green)' : lb==='L' ? 'var(--red)' :
-                  lb==='C' ? (cur.close>=cur.open?'var(--green)':'var(--red)') : 'var(--text-primary)'}}>
+                  lb==='C' ? ((m1Price || cur.close) >= cur.open ? 'var(--green)' : 'var(--red)') : 'var(--text-primary)'}}>
                   {fmtPrice(v, sym.decimals)}
                 </span>
               </div>
