@@ -4,8 +4,6 @@ import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImper
 import type { Candle, Trade, Symbol } from '@/types'
 import { useTheme } from '@/contexts/ThemeContext'
 import { calcPnl } from '@/lib/utils'
-import type { IndicatorConfig } from './IndicatorPanes'
-import { sma, ema, bollingerBands, vwap, toLineSeries } from '@/lib/indicators'
 
 interface LineYPositions {
   entryY: number | null
@@ -25,8 +23,6 @@ interface Props {
   onSetSL?:      (tradeId: string, price: number) => void
   onSetTP?:      (tradeId: string, price: number) => void
   onCloseTrade?: (tradeId: string) => void
-  // Indicators
-  indicatorConfig?: IndicatorConfig
 }
 
 // Colours matching TradingView paper-trading
@@ -550,7 +546,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100%', display: 'block', cursor: activeTool ? 'crosshair' : cursorStyle }}
+        style={{ width: '100%', height: '100%', display: 'block', cursor: cursorStyle }}
       />
 
       {/* Overlay */}
