@@ -24,7 +24,7 @@ interface Props {
 const TV_ENTRY_BUY  = '#2962ff'
 const TV_ENTRY_SELL = '#ef5350'
 const TV_TP         = '#0d9488'   // teal
-const TV_SL         = '#f59e0b'   // amber
+const TV_SL         = '#ef4444'   // red (matches SL widget + price line)
 
 type DragType = 'sl' | 'tp' | 'entry'
 
@@ -349,8 +349,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
           priceLines.current.set(`${tr.id}:entry`, seriesRef.current.createPriceLine({
             price: tr.entry_price,
             color: entryColor,
-            lineWidth: 1, lineStyle: LineStyle.Solid,
-            axisLabelVisible: true, title: '',
+            lineWidth: 2, lineStyle: LineStyle.Solid,
+            axisLabelVisible: true, title: tr.side === 'buy' ? '▲ Entry' : '▼ Entry',
           }))
         } catch {}
 
@@ -359,8 +359,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
             priceLines.current.set(`${tr.id}:sl`, seriesRef.current.createPriceLine({
               price: tr.stop_loss,
               color: TV_SL,
-              lineWidth: 1, lineStyle: LineStyle.Dashed,
-              axisLabelVisible: true, title: '',
+              lineWidth: 2, lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true, title: '✕ SL',
             }))
           } catch {}
         }
@@ -370,8 +370,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
             priceLines.current.set(`${tr.id}:tp`, seriesRef.current.createPriceLine({
               price: tr.take_profit,
               color: TV_TP,
-              lineWidth: 1, lineStyle: LineStyle.Dashed,
-              axisLabelVisible: true, title: '',
+              lineWidth: 2, lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true, title: '✓ TP',
             }))
           } catch {}
         }

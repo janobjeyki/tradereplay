@@ -77,6 +77,8 @@ export default function WorkspacePage() {
   const playableStartIdxRef = useRef<number>(0)
   const stateRef            = useRef({ candles, idx, trades, balance })
   const symRef              = useRef<Symbol>(getSymbol('XAUUSD'))
+  // Fix 1: always holds the real M1 close price — never changes on TF switch
+  const m1PriceRef          = useRef<number>(0)
 
   useEffect(() => { stateRef.current = { candles, idx, trades, balance } }, [candles, idx, trades, balance])
   useEffect(() => { if (user && id) init() }, [user, id])
@@ -140,6 +142,7 @@ export default function WorkspacePage() {
 
     // Fix 2: initialise simTimestamp from the actual M1 candle at startIdx
     simTimestampRef.current = allUpToEnd[startIdx - 1]?.time ?? startTs
+    m1PriceRef.current = allUpToEnd[startIdx - 1]?.close ?? 0
 
     setCandles(allUpToEnd)
     setIdx(startIdx)
@@ -200,6 +203,9 @@ export default function WorkspacePage() {
 
     // Fix 2: advance simTimestamp by steps × seconds-per-TF
     simTimestampRef.current += steps * TF_SECONDS[timeframe as TimeFrame]
+    // Fix 1: update m1Price from actual M1 candle nearest to simTimestamp
+    const m1Nearest = originalCandlesRef.current.findLast(c => c.time <= simTimestampRef.current)
+    if (m1Nearest) m1PriceRef.current = m1Nearest.close
 
     const newBal   = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
     const lastCandle = c[end - 1]
@@ -357,8 +363,10 @@ export default function WorkspacePage() {
   const done     = idx >= candles.length
   const openTr   = trades.filter(t => t.status === 'open')
   const closedTr = trades.filter(t => t.status === 'closed')
-  const openPnl  = cur
-    ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, cur.close, tr.quantity, sym.contractSize), 0)
+  // Fix 1: use m1PriceRef so TF switch never changes displayed price or PnL
+  const m1Price  = m1PriceRef.current || cur?.close || 0
+  const openPnl  = m1Price
+    ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize), 0)
     : 0
   const equity   = parseFloat((balance + openPnl).toFixed(2))
 
@@ -554,7 +562,7 @@ export default function WorkspacePage() {
                       </thead>
                       <tbody>
                         {openTr.map(tr => {
-                          const upnl = cur ? calcPnl(tr.side, tr.entry_price, cur.close, tr.quantity, sym.contractSize) : 0
+                          const upnl = m1Price ? calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize) : 0
                           return (
                             <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
                               <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
@@ -611,7 +619,7 @@ export default function WorkspacePage() {
           <div className="rounded-xl p-4" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
             <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('currentPrice')}</p>
             <p className="font-mono text-xl font-bold" style={{color:'var(--accent)'}}>
-              {cur ? fmtPrice(cur.close, sym.decimals) : '—'}
+              {m1Price ? fmtPrice(m1Price, sym.decimals) : '—'}
             </p>
             <div className="flex gap-4 mt-2.5">
               <div>
