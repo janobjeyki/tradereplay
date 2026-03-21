@@ -564,8 +564,28 @@ export default function WorkspacePage() {
                             <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
                               <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
                               <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
-                              <td className="px-3 py-2 font-mono" style={{color:'var(--text-muted)'}}>{tr.stop_loss   ? fmtPrice(tr.stop_loss,   sym.decimals) : '—'}</td>
-                              <td className="px-3 py-2 font-mono" style={{color:'var(--text-muted)'}}>{tr.take_profit ? fmtPrice(tr.take_profit, sym.decimals) : '—'}</td>
+                              <td className="px-3 py-2 font-mono">
+                                {tr.stop_loss ? (
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:3}}>
+                                    <span style={{color:'var(--red)'}}>{fmtPrice(tr.stop_loss, sym.decimals)}</span>
+                                    <button onClick={() => handleSetSL(tr.id, 0)} title="Remove SL" style={{
+                                      background:'none', border:'none', color:'var(--red)', cursor:'pointer',
+                                      fontSize:12, fontWeight:700, padding:'0 1px', lineHeight:1, opacity:0.7,
+                                    }}>×</button>
+                                  </span>
+                                ) : <span style={{color:'var(--text-muted)'}}>—</span>}
+                              </td>
+                              <td className="px-3 py-2 font-mono">
+                                {tr.take_profit ? (
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:3}}>
+                                    <span style={{color:'var(--green)'}}>{fmtPrice(tr.take_profit, sym.decimals)}</span>
+                                    <button onClick={() => handleSetTP(tr.id, 0)} title="Remove TP" style={{
+                                      background:'none', border:'none', color:'var(--red)', cursor:'pointer',
+                                      fontSize:12, fontWeight:700, padding:'0 1px', lineHeight:1, opacity:0.7,
+                                    }}>×</button>
+                                  </span>
+                                ) : <span style={{color:'var(--text-muted)'}}>—</span>}
+                              </td>
                               <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
                               <td className="px-3 py-2 font-mono font-semibold" style={{color: upnl>=0?'var(--green)':'var(--red)'}}>
                                 {upnl>=0?'+':''}{upnl.toFixed(2)}
