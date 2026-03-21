@@ -4,28 +4,24 @@ import { useEffect, useRef } from 'react'
 import { forwardRef } from 'react'
 import type { Candle } from '@/types'
 import { useTheme } from '@/contexts/ThemeContext'
-import { sma, ema, bollingerBands, rsi, macd, volume, vwap, toLineSeries } from '@/lib/indicators'
+import { sma, ema, bollingerBands, rsi, macd, toLineSeries } from '@/lib/indicators'
 
 export interface IndicatorConfig {
   // Overlay (on main chart)
   sma:  { enabled: boolean; periods: number[] }
   ema:  { enabled: boolean; periods: number[] }
   bb:   { enabled: boolean; period: number; mult: number }
-  vwap: { enabled: boolean }
   // Sub-panes
   rsi:    { enabled: boolean; period: number }
   macd:   { enabled: boolean; fast: number; slow: number; signal: number }
-  volume: { enabled: boolean }
 }
 
 export const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
   sma:    { enabled: false, periods: [20, 50, 200] },
   ema:    { enabled: false, periods: [9, 21] },
   bb:     { enabled: false, period: 20, mult: 2 },
-  vwap:   { enabled: false },
   rsi:    { enabled: false, period: 14 },
   macd:   { enabled: false, fast: 12, slow: 26, signal: 9 },
-  volume: { enabled: false },
 }
 
 const SMA_COLORS  = ['#f59e0b', '#3b82f6', '#ef4444', '#a78bfa']
@@ -42,8 +38,7 @@ export function IndicatorPanes({ candles, config, mainChartRef }: Props) {
   const { theme }  = useTheme()
   const rsiRef     = useRef<HTMLDivElement>(null)
   const macdRef    = useRef<HTMLDivElement>(null)
-  const volRef     = useRef<HTMLDivElement>(null)
-  const charts     = useRef<{ rsi: any; macd: any; vol: any }>({ rsi: null, macd: null, vol: null })
+  const charts     = useRef<{ rsi: any; macd: any }>({ rsi: null, macd: null })
   const unsubs     = useRef<(() => void)[]>([])
 
   const getColors = () => {
@@ -54,7 +49,7 @@ export function IndicatorPanes({ candles, config, mainChartRef }: Props) {
   const destroy = () => {
     unsubs.current.forEach(fn => fn())
     unsubs.current = []
-    ;(['rsi','macd','vol'] as const).forEach(k => {
+    ;(['rsi','macd'] as const).forEach(k => {
       try { charts.current[k]?.remove() } catch {}
       charts.current[k] = null
     })
@@ -119,28 +114,18 @@ export function IndicatorPanes({ candles, config, mainChartRef }: Props) {
         hist.setData(candles.map((c,i) => ({ time: c.time as any, value: m[i].hist ?? 0, color: (m[i].hist??0)>=0?'#22c55e':'#ef4444' })).filter((_,i) => m[i].hist != null))
         syncWith(ch)
       }
-
-      if (config.volume.enabled && volRef.current) {
-        const ch = lc.createChart(volRef.current, { ...base, height: PANE_H, timeScale: { ...base.timeScale, visible: true } })
-        charts.current.vol = ch
-        const vols = volume(candles)
-        const vs   = ch.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'right', lastValueVisible: false })
-        vs.setData(candles.map((c,i) => ({ time: c.time as any, value: vols[i], color: c.close>=c.open?'rgba(34,197,94,0.55)':'rgba(239,68,68,0.55)' })))
-        syncWith(ch)
-      }
     })
     return destroy
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, config, theme])
 
-  const show = config.rsi.enabled || config.macd.enabled || config.volume.enabled
+  const show = config.rsi.enabled || config.macd.enabled
   if (!show) return null
 
   return (
     <div style={{ display:'flex', flexDirection:'column', flexShrink:0 }}>
       {config.rsi.enabled    && <Pane label={`RSI (${config.rsi.period})`} ref={rsiRef} />}
       {config.macd.enabled   && <Pane label={`MACD (${config.macd.fast},${config.macd.slow},${config.macd.signal})`} ref={macdRef} />}
-      {config.volume.enabled && <Pane label="Volume" ref={volRef} />}
     </div>
   )
 }

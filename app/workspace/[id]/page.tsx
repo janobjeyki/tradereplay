@@ -494,39 +494,111 @@ export default function WorkspacePage() {
             {/* Indicator panel */}
             {showIndicators && (
               <div style={{
-                position:'absolute', top:36, left:8, zIndex:20, minWidth:220,
+                position:'absolute', top:36, left:8, zIndex:20, width:280,
                 background:'var(--bg-secondary)', border:'1px solid var(--border-default)',
-                borderRadius:8, padding:'12px 14px', boxShadow:'0 4px 20px rgba(0,0,0,0.35)',
-                display:'flex', flexDirection:'column', gap:5,
+                borderRadius:10, padding:'14px', boxShadow:'0 6px 24px rgba(0,0,0,0.4)',
+                display:'flex', flexDirection:'column', gap:0,
+                maxHeight:'70vh', overflowY:'auto',
               }}>
-                <p style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>Overlay</p>
-                {([
-                  { label:'SMA (20, 50, 200)', key:'sma'  as const },
-                  { label:'EMA (9, 21)',        key:'ema'  as const },
-                  { label:'Bollinger Bands',    key:'bb'   as const },
-                  { label:'VWAP',               key:'vwap' as const },
-                ] as const).map(({label,key}) => (
-                  <label key={key} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'var(--text-primary)'}}>
-                    <input type="checkbox" checked={(indicatorConfig[key] as any).enabled}
-                      onChange={e => setIndicatorConfig(prev => ({...prev,[key]:{...prev[key as keyof IndicatorConfig],enabled:e.target.checked}}))}
-                      style={{accentColor:'var(--accent)',width:13,height:13}} />
-                    {label}
-                  </label>
-                ))}
-                <p style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',margin:'4px 0 2px'}}>Sub-pane</p>
-                {([
-                  { label:`RSI (${indicatorConfig.rsi.period})`, key:'rsi'    as const },
-                  { label:`MACD (${indicatorConfig.macd.fast},${indicatorConfig.macd.slow})`, key:'macd' as const },
-                  { label:'Volume',                              key:'volume' as const },
-                ] as const).map(({label,key}) => (
-                  <label key={key} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'var(--text-primary)'}}>
-                    <input type="checkbox" checked={indicatorConfig[key].enabled}
-                      onChange={e => setIndicatorConfig(prev => ({...prev,[key]:{...prev[key as keyof IndicatorConfig],enabled:e.target.checked}}))}
-                      style={{accentColor:'var(--accent)',width:13,height:13}} />
-                    {label}
-                  </label>
-                ))}
-                <button onClick={() => setShowIndicators(false)} style={{marginTop:4,padding:'3px 0',fontSize:11,background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',textAlign:'right'}}>Close ×</button>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <span style={{fontSize:12,fontWeight:700,color:'var(--text-primary)'}}>Indicators</span>
+                  <button onClick={() => setShowIndicators(false)} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+                </div>
+
+                {/* ── Overlay section ── */}
+                <SectionLabel>Overlay</SectionLabel>
+
+                <IndicatorRow
+                  label="SMA"
+                  enabled={indicatorConfig.sma.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, sma:{...p.sma, enabled:v}}))}
+                >
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
+                    {indicatorConfig.sma.periods.map((period, i) => (
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:4}}>
+                        <input type="number" value={period} min={1} max={500}
+                          onChange={e => setIndicatorConfig(p => {
+                            const periods = [...p.sma.periods]
+                            periods[i] = parseInt(e.target.value)||period
+                            return {...p, sma:{...p.sma, periods}}
+                          })}
+                          style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)'}} />
+                      </div>
+                    ))}
+                  </div>
+                </IndicatorRow>
+
+                <IndicatorRow
+                  label="EMA"
+                  enabled={indicatorConfig.ema.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, ema:{...p.ema, enabled:v}}))}
+                >
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
+                    {indicatorConfig.ema.periods.map((period, i) => (
+                      <input key={i} type="number" value={period} min={1} max={500}
+                        onChange={e => setIndicatorConfig(p => {
+                          const periods = [...p.ema.periods]
+                          periods[i] = parseInt(e.target.value)||period
+                          return {...p, ema:{...p.ema, periods}}
+                        })}
+                        style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)'}} />
+                    ))}
+                  </div>
+                </IndicatorRow>
+
+                <IndicatorRow
+                  label="Bollinger Bands"
+                  enabled={indicatorConfig.bb.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, bb:{...p.bb, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.bb.period} min={2} max={200}
+                        onChange={e => setIndicatorConfig(p => ({...p, bb:{...p.bb, period:parseInt(e.target.value)||20}}))}
+                        style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>StdDev
+                      <input type="number" value={indicatorConfig.bb.mult} min={0.5} max={5} step={0.5}
+                        onChange={e => setIndicatorConfig(p => ({...p, bb:{...p.bb, mult:parseFloat(e.target.value)||2}}))}
+                        style={{width:44,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                  </div>
+                </IndicatorRow>
+
+                {/* ── Sub-pane section ── */}
+                <SectionLabel>Sub-pane</SectionLabel>
+
+                <IndicatorRow
+                  label="RSI"
+                  enabled={indicatorConfig.rsi.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, rsi:{...p.rsi, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.rsi.period} min={2} max={100}
+                        onChange={e => setIndicatorConfig(p => ({...p, rsi:{...p.rsi, period:parseInt(e.target.value)||14}}))}
+                        style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                  </div>
+                </IndicatorRow>
+
+                <IndicatorRow
+                  label="MACD"
+                  enabled={indicatorConfig.macd.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, macd:{...p.macd, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap',alignItems:'center'}}>
+                    {([['Fast','fast',1,50],['Slow','slow',1,100],['Signal','signal',1,50]] as const).map(([lbl,key,min,max]) => (
+                      <label key={key} style={{fontSize:11,color:'var(--text-muted)'}}>
+                        {lbl}
+                        <input type="number" value={(indicatorConfig.macd as any)[key]} min={min} max={max}
+                          onChange={e => setIndicatorConfig(p => ({...p, macd:{...p.macd, [key]:parseInt(e.target.value)||(indicatorConfig.macd as any)[key]}}))}
+                          style={{width:40,padding:'2px 4px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                      </label>
+                    ))}
+                  </div>
+                </IndicatorRow>
+
               </div>
             )}
             <WorkspaceChart
@@ -760,6 +832,35 @@ export default function WorkspacePage() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Indicator panel helpers ───────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{
+      fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
+      textTransform: 'uppercase', letterSpacing: '0.08em',
+      margin: '8px 0 4px', borderTop: '1px solid var(--border-subtle)', paddingTop: 8,
+    }}>{children}</p>
+  )
+}
+
+function IndicatorRow({ label, enabled, onToggle, children }: {
+  label: string
+  enabled: boolean
+  onToggle: (v: boolean) => void
+  children?: React.ReactNode
+}) {
+  return (
+    <div style={{ marginBottom: 4 }}>
+      <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+        <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)}
+          style={{ accentColor:'var(--accent)', width:13, height:13, flexShrink:0 }} />
+        <span style={{ fontSize:12, fontWeight:600, color:'var(--text-primary)' }}>{label}</span>
+      </label>
+      {enabled && children}
     </div>
   )
 }

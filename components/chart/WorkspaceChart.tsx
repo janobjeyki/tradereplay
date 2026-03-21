@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImper
 import type { Candle, Trade, Symbol } from '@/types'
 import { useTheme } from '@/contexts/ThemeContext'
 import { calcPnl } from '@/lib/utils'
-import { sma, ema, bollingerBands, vwap, toLineSeries } from '@/lib/indicators'
+import { sma, ema, bollingerBands, toLineSeries } from '@/lib/indicators'
 import type { IndicatorConfig } from './IndicatorPanes'
 
 interface LineYPositions {
@@ -524,13 +524,6 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         ensure('bb_lower',  '#a78bfa', true).setData(candles.map((c,i)=>({time:c.time as any,value:bb[i].lower})).filter(d=>d.value!=null))
       } else {
         ['bb_upper','bb_middle','bb_lower'].forEach(k => remove(k))
-      }
-
-      // VWAP
-      if (ic?.vwap?.enabled) {
-        ensure('vwap', '#f59e0b').setData(toLineSeries(candles, vwap(candles)))
-      } else {
-        remove('vwap')
       }
     })
   }, [candles, indicatorConfig])
