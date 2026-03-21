@@ -513,18 +513,17 @@ export default function WorkspacePage() {
                   enabled={indicatorConfig.sma.enabled}
                   onToggle={v => setIndicatorConfig(p => ({...p, sma:{...p.sma, enabled:v}}))}
                 >
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
-                    {indicatorConfig.sma.periods.map((period, i) => (
-                      <div key={i} style={{display:'flex',alignItems:'center',gap:4}}>
-                        <input type="number" value={period} min={1} max={500}
-                          onChange={e => setIndicatorConfig(p => {
-                            const periods = [...p.sma.periods]
-                            periods[i] = parseInt(e.target.value)||period
-                            return {...p, sma:{...p.sma, periods}}
-                          })}
-                          style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)'}} />
-                      </div>
-                    ))}
+                  <div style={{display:'flex',gap:6,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.sma.period} min={1} max={500}
+                        onChange={e => setIndicatorConfig(p => ({...p, sma:{...p.sma, period:parseInt(e.target.value)||p.sma.period}}))}
+                        style={{width:56,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Color
+                      <input type="color" value={indicatorConfig.sma.color}
+                        onChange={e => setIndicatorConfig(p => ({...p, sma:{...p.sma, color:e.target.value}}))}
+                        style={{width:28,height:22,padding:0,border:'none',background:'none',cursor:'pointer',marginLeft:4}} />
+                    </label>
                   </div>
                 </IndicatorRow>
 
@@ -533,16 +532,17 @@ export default function WorkspacePage() {
                   enabled={indicatorConfig.ema.enabled}
                   onToggle={v => setIndicatorConfig(p => ({...p, ema:{...p.ema, enabled:v}}))}
                 >
-                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
-                    {indicatorConfig.ema.periods.map((period, i) => (
-                      <input key={i} type="number" value={period} min={1} max={500}
-                        onChange={e => setIndicatorConfig(p => {
-                          const periods = [...p.ema.periods]
-                          periods[i] = parseInt(e.target.value)||period
-                          return {...p, ema:{...p.ema, periods}}
-                        })}
-                        style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)'}} />
-                    ))}
+                  <div style={{display:'flex',gap:6,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.ema.period} min={1} max={500}
+                        onChange={e => setIndicatorConfig(p => ({...p, ema:{...p.ema, period:parseInt(e.target.value)||p.ema.period}}))}
+                        style={{width:56,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Color
+                      <input type="color" value={indicatorConfig.ema.color}
+                        onChange={e => setIndicatorConfig(p => ({...p, ema:{...p.ema, color:e.target.value}}))}
+                        style={{width:28,height:22,padding:0,border:'none',background:'none',cursor:'pointer',marginLeft:4}} />
+                    </label>
                   </div>
                 </IndicatorRow>
 

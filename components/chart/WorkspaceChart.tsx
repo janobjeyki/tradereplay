@@ -496,22 +496,19 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         if (ov.has(key)) { try { chartRef.current?.removeSeries(ov.get(key)) } catch {}; ov.delete(key) }
       }
 
-      // SMA
-      const smaColors = ['#f59e0b','#3b82f6','#ef4444','#a78bfa']
+      // SMA — single period
       if (ic?.sma?.enabled) {
-        ic.sma.periods.forEach((p, i) => {
-          ensure(`sma_${p}`, smaColors[i % smaColors.length]).setData(toLineSeries(candles, sma(candles, p)))
-        })
+        // remove old keys if period changed
+        [9,20,50,100,200].filter(p => p !== ic.sma.period).forEach(p => remove(`sma_${p}`))
+        ensure(`sma_${ic.sma.period}`, ic.sma.color || '#f59e0b').setData(toLineSeries(candles, sma(candles, ic.sma.period)))
       } else {
         [9,20,50,100,200].forEach(p => remove(`sma_${p}`))
       }
 
-      // EMA
-      const emaColors = ['#a78bfa','#60a5fa','#34d399','#f97316']
+      // EMA — single period
       if (ic?.ema?.enabled) {
-        ic.ema.periods.forEach((p, i) => {
-          ensure(`ema_${p}`, emaColors[i % emaColors.length]).setData(toLineSeries(candles, ema(candles, p)))
-        })
+        [9,12,21,26,50,200].filter(p => p !== ic.ema.period).forEach(p => remove(`ema_${p}`))
+        ensure(`ema_${ic.ema.period}`, ic.ema.color || '#a78bfa').setData(toLineSeries(candles, ema(candles, ic.ema.period)))
       } else {
         [9,12,21,26,50,200].forEach(p => remove(`ema_${p}`))
       }

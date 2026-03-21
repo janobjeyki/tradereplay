@@ -8,8 +8,8 @@ import { sma, ema, bollingerBands, rsi, macd, toLineSeries } from '@/lib/indicat
 
 export interface IndicatorConfig {
   // Overlay (on main chart)
-  sma:  { enabled: boolean; periods: number[] }
-  ema:  { enabled: boolean; periods: number[] }
+  sma:  { enabled: boolean; period: number; color: string }
+  ema:  { enabled: boolean; period: number; color: string }
   bb:   { enabled: boolean; period: number; mult: number }
   // Sub-panes
   rsi:    { enabled: boolean; period: number }
@@ -17,8 +17,8 @@ export interface IndicatorConfig {
 }
 
 export const DEFAULT_INDICATOR_CONFIG: IndicatorConfig = {
-  sma:    { enabled: false, periods: [20, 50, 200] },
-  ema:    { enabled: false, periods: [9, 21] },
+  sma:    { enabled: false, period: 20, color: '#f59e0b' },
+  ema:    { enabled: false, period: 9,  color: '#a78bfa' },
   bb:     { enabled: false, period: 20, mult: 2 },
   rsi:    { enabled: false, period: 14 },
   macd:   { enabled: false, fast: 12, slow: 26, signal: 9 },
