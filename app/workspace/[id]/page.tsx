@@ -14,6 +14,7 @@ import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
 import { calcPnl, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
 import { Spinner, Badge, TabBar } from '@/components/ui'
 import { WorkspaceChart, type ChartHandle } from '@/components/chart/WorkspaceChart'
+import { IndicatorPanes, DEFAULT_INDICATOR_CONFIG, type IndicatorConfig } from '@/components/chart/IndicatorPanes'
 
 const SKIP_OPTIONS = [3, 5, 10, 15, 30, 60, 120, 240]
 const WEEKDAYS     = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
@@ -60,7 +61,9 @@ export default function WorkspacePage() {
   const [accountBreached, setAccountBreached] = useState(false)
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
-  const chartHandleRef = useRef<ChartHandle>(null)
+  const chartHandleRef     = useRef<ChartHandle>(null)
+  const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
+  const [showIndicators,  setShowIndicators]  = useState(false)
 
   // ── Single source of truth: absolute index into originalCandlesRef (M1) ──
   // This is STATE so it triggers re-renders. All derived values (price, time) 
@@ -479,13 +482,60 @@ export default function WorkspacePage() {
                   color: timeframe===tf ? 'var(--accent)' : 'var(--text-muted)',
                 }}>{tf.toUpperCase()}</button>
               ))}
+              <button onClick={() => setShowIndicators(p => !p)} style={{
+                padding:'2px 9px', fontSize:11, borderRadius:4, cursor:'pointer', marginLeft:4,
+                fontWeight:600,
+                border: showIndicators ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                background: showIndicators ? 'var(--accent-muted)' : 'var(--bg-secondary)',
+                color: showIndicators ? 'var(--accent)' : 'var(--text-muted)',
+              }}>Indicators</button>
             </div>
+
+            {/* Indicator panel */}
+            {showIndicators && (
+              <div style={{
+                position:'absolute', top:36, left:8, zIndex:20, minWidth:220,
+                background:'var(--bg-secondary)', border:'1px solid var(--border-default)',
+                borderRadius:8, padding:'12px 14px', boxShadow:'0 4px 20px rgba(0,0,0,0.35)',
+                display:'flex', flexDirection:'column', gap:5,
+              }}>
+                <p style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>Overlay</p>
+                {([
+                  { label:'SMA (20, 50, 200)', key:'sma'  as const },
+                  { label:'EMA (9, 21)',        key:'ema'  as const },
+                  { label:'Bollinger Bands',    key:'bb'   as const },
+                  { label:'VWAP',               key:'vwap' as const },
+                ] as const).map(({label,key}) => (
+                  <label key={key} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'var(--text-primary)'}}>
+                    <input type="checkbox" checked={(indicatorConfig[key] as any).enabled}
+                      onChange={e => setIndicatorConfig(prev => ({...prev,[key]:{...prev[key as keyof IndicatorConfig],enabled:e.target.checked}}))}
+                      style={{accentColor:'var(--accent)',width:13,height:13}} />
+                    {label}
+                  </label>
+                ))}
+                <p style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',margin:'4px 0 2px'}}>Sub-pane</p>
+                {([
+                  { label:`RSI (${indicatorConfig.rsi.period})`, key:'rsi'    as const },
+                  { label:`MACD (${indicatorConfig.macd.fast},${indicatorConfig.macd.slow})`, key:'macd' as const },
+                  { label:'Volume',                              key:'volume' as const },
+                ] as const).map(({label,key}) => (
+                  <label key={key} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:'var(--text-primary)'}}>
+                    <input type="checkbox" checked={indicatorConfig[key].enabled}
+                      onChange={e => setIndicatorConfig(prev => ({...prev,[key]:{...prev[key as keyof IndicatorConfig],enabled:e.target.checked}}))}
+                      style={{accentColor:'var(--accent)',width:13,height:13}} />
+                    {label}
+                  </label>
+                ))}
+                <button onClick={() => setShowIndicators(false)} style={{marginTop:4,padding:'3px 0',fontSize:11,background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',textAlign:'right'}}>Close ×</button>
+              </div>
+            )}
             <WorkspaceChart
               ref={chartHandleRef}
               candles={aggregatedCandles.slice(0, displayIdx)}
               openTrades={openTr}
               symbol={sym}
               lastPrice={m1Price || undefined}
+              indicatorConfig={indicatorConfig}
               onSetSL={handleSetSL}
               onSetTP={handleSetTP}
               onCloseTrade={closeTrade}
@@ -530,6 +580,13 @@ export default function WorkspacePage() {
               </select>
             </div>
           </div>
+
+          {/* Indicator sub-panes */}
+          <IndicatorPanes
+            candles={aggregatedCandles.slice(0, displayIdx)}
+            config={indicatorConfig}
+            mainChartRef={chartHandleRef.current?.chartRef ?? { current: null } as any}
+          />
 
           {/* Trades table */}
           <div className="h-48 flex flex-col shrink-0" style={{borderTop:'1px solid var(--border-subtle)'}}>

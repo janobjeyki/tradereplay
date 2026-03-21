@@ -4,6 +4,8 @@ import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImper
 import type { Candle, Trade, Symbol } from '@/types'
 import { useTheme } from '@/contexts/ThemeContext'
 import { calcPnl } from '@/lib/utils'
+import { sma, ema, bollingerBands, vwap, toLineSeries } from '@/lib/indicators'
+import type { IndicatorConfig } from './IndicatorPanes'
 
 interface LineYPositions {
   entryY: number | null
@@ -20,6 +22,7 @@ interface Props {
   openTrades:    Trade[]
   symbol:        Symbol
   lastPrice?:    number
+  indicatorConfig?: IndicatorConfig
   onSetSL?:      (tradeId: string, price: number) => void
   onSetTP?:      (tradeId: string, price: number) => void
   onCloseTrade?: (tradeId: string) => void
@@ -34,8 +37,7 @@ const TV_SL         = '#ef4444'   // red (matches SL widget + price line)
 type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
-  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade,
-    indicatorConfig },
+  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade
   ref
 ) {
   const containerRef    = useRef<HTMLDivElement>(null)
@@ -467,74 +469,68 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
     return () => el.removeEventListener('mousemove', onMove)
   }, [openTrades])
 
-  // ── Indicator overlay series ──────────────────────────────────────
-  const indicatorSeriesRef = useRef<Map<string, any>>(new Map())
+
+
+
+  // ── Overlay indicator series ──────────────────────────────────────
+  const overlaySeriesRef = useRef<Map<string,any>>(new Map())
   useEffect(() => {
-    if (!seriesRef.current || !candles.length || !indicatorConfig) return
+    if (!seriesRef.current || !chartRef.current || !candles.length) return
     import('lightweight-charts').then(({ LineStyle }) => {
       if (!seriesRef.current || !chartRef.current) return
-      const ic = indicatorConfig
-      const existing = indicatorSeriesRef.current
+      const ov  = overlaySeriesRef.current
+      const ic  = indicatorConfig
 
-      const ensureLine = (key: string, color: string, width = 1, dashed = false) => {
-        if (!existing.has(key)) {
+      const ensure = (key: string, color: string, dashed = false) => {
+        if (!ov.has(key)) {
           const s = chartRef.current.addLineSeries({
-            color, lineWidth: width,
+            color, lineWidth: 1,
             lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
             priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
           })
-          existing.set(key, s)
+          ov.set(key, s)
         }
-        return existing.get(key)
+        return ov.get(key)
       }
-      const removeLine = (key: string) => {
-        if (existing.has(key)) {
-          try { chartRef.current?.removeSeries(existing.get(key)) } catch {}
-          existing.delete(key)
-        }
+      const remove = (key: string) => {
+        if (ov.has(key)) { try { chartRef.current?.removeSeries(ov.get(key)) } catch {}; ov.delete(key) }
       }
 
       // SMA
-      if (ic.sma?.enabled) {
-        ic.sma.lines.forEach((line: any) => {
-          const key = `sma_${line.period}`
-          const s = ensureLine(key, line.color, 1)
-          s.setData(toLineSeries(candles, sma(candles, line.period)))
+      const smaColors = ['#f59e0b','#3b82f6','#ef4444','#a78bfa']
+      if (ic?.sma?.enabled) {
+        ic.sma.periods.forEach((p, i) => {
+          ensure(`sma_${p}`, smaColors[i % smaColors.length]).setData(toLineSeries(candles, sma(candles, p)))
         })
       } else {
-        ['sma_9','sma_20','sma_50','sma_200'].forEach(k => removeLine(k))
+        [9,20,50,100,200].forEach(p => remove(`sma_${p}`))
       }
 
       // EMA
-      if (ic.ema?.enabled) {
-        ic.ema.lines.forEach((line: any) => {
-          const key = `ema_${line.period}`
-          const s = ensureLine(key, line.color, 1)
-          s.setData(toLineSeries(candles, ema(candles, line.period)))
+      const emaColors = ['#a78bfa','#60a5fa','#34d399','#f97316']
+      if (ic?.ema?.enabled) {
+        ic.ema.periods.forEach((p, i) => {
+          ensure(`ema_${p}`, emaColors[i % emaColors.length]).setData(toLineSeries(candles, ema(candles, p)))
         })
       } else {
-        ['ema_9','ema_20','ema_50','ema_200'].forEach(k => removeLine(k))
+        [9,12,21,26,50,200].forEach(p => remove(`ema_${p}`))
       }
 
       // Bollinger Bands
-      if (ic.bb?.enabled) {
+      if (ic?.bb?.enabled) {
         const bb = bollingerBands(candles, ic.bb.period, ic.bb.mult)
-        const upper  = ensureLine('bb_upper',  '#a78bfa', 1, true)
-        const middle = ensureLine('bb_middle', '#a78bfa', 1)
-        const lower  = ensureLine('bb_lower',  '#a78bfa', 1, true)
-        upper.setData(candles.map((c, i) => ({ time: c.time as any, value: bb[i].upper })).filter(d => d.value !== null))
-        middle.setData(candles.map((c, i) => ({ time: c.time as any, value: bb[i].middle })).filter(d => d.value !== null))
-        lower.setData(candles.map((c, i) => ({ time: c.time as any, value: bb[i].lower })).filter(d => d.value !== null))
+        ensure('bb_upper',  '#a78bfa', true).setData(candles.map((c,i)=>({time:c.time as any,value:bb[i].upper})).filter(d=>d.value!=null))
+        ensure('bb_middle', '#a78bfa').setData(candles.map((c,i)=>({time:c.time as any,value:bb[i].middle})).filter(d=>d.value!=null))
+        ensure('bb_lower',  '#a78bfa', true).setData(candles.map((c,i)=>({time:c.time as any,value:bb[i].lower})).filter(d=>d.value!=null))
       } else {
-        ['bb_upper','bb_middle','bb_lower'].forEach(k => removeLine(k))
+        ['bb_upper','bb_middle','bb_lower'].forEach(k => remove(k))
       }
 
       // VWAP
-      if (ic.vwap?.enabled) {
-        const s = ensureLine('vwap', '#f59e0b', 1)
-        s.setData(toLineSeries(candles, vwap(candles)))
+      if (ic?.vwap?.enabled) {
+        ensure('vwap', '#f59e0b').setData(toLineSeries(candles, vwap(candles)))
       } else {
-        removeLine('vwap')
+        remove('vwap')
       }
     })
   }, [candles, indicatorConfig])
