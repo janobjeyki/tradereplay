@@ -112,7 +112,15 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
         const chart = lc.createChart(containerRef.current, {
           layout:  { background: { color: c.bg }, textColor: c.text },
           grid:    { vertLines: { visible: false }, horzLines: { visible: false } },
-          crosshair: { mode: lc.CrosshairMode.Normal },
+          crosshair: {
+            mode: lc.CrosshairMode.Normal,
+            vertLine: {
+              labelVisible: true,
+            },
+            horzLine: {
+              labelVisible: true,
+            },
+          },
           rightPriceScale: {
             borderColor: c.border,
             scaleMargins: { top: 0.1, bottom: 0.1 },
@@ -120,7 +128,7 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
           },
           // Fix 2: disable price-axis drag so SL/TP can't be moved from axis
           handleScale: {
-            axisPressedMouseMove: { price: false, time: true },
+            axisPressedMouseMove: { price: true, time: true },
             mouseWheel: true,
             pinch: true,
           },

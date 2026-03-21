@@ -360,6 +360,7 @@ export default function WorkspacePage() {
   const done     = m1AbsIdx >= m1All.length - 1
   const openTr   = trades.filter(t => t.status === 'open')
   const closedTr = trades.filter(t => t.status === 'closed')
+  const realizedPnl = parseFloat(closedTr.reduce((a, tr) => a + (tr.pnl ?? 0), 0).toFixed(2))
   const openPnl  = m1Price
     ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize), 0)
     : 0
@@ -424,16 +425,10 @@ export default function WorkspacePage() {
           </div>
         )}
 
-        <span className="font-mono text-[10px]" style={{color:'var(--text-muted)'}}>{dateStr}</span>
-
         <div className="ml-auto flex items-center gap-4 shrink-0">
           <div className="text-right">
-            <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>{t('balance')}</p>
-            <p className="font-mono font-bold text-base" style={{color:'var(--accent)'}}>{fmtMoney(balance)}</p>
-          </div>
-          <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Equity</p>
-            <p className="font-mono font-bold text-base" style={{color: equity >= balance ? 'var(--green)' : 'var(--red)'}}>
+            <p className="font-mono font-bold text-base" style={{color: equity >= balance ? 'var(--accent)' : 'var(--red)'}}>
               {fmtMoney(equity)}
             </p>
           </div>
@@ -442,6 +437,14 @@ export default function WorkspacePage() {
               <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>{t('openPnl')}</p>
               <p className="font-mono font-semibold text-sm" style={{color: openPnl>=0?'var(--green)':'var(--red)'}}>
                 {openPnl>=0?'+':''}{openPnl.toFixed(2)}
+              </p>
+            </div>
+          )}
+          {realizedPnl !== 0 && (
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Realized P&L</p>
+              <p className="font-mono font-semibold text-sm" style={{color: realizedPnl>=0?'var(--green)':'var(--red)'}}>
+                {realizedPnl>=0?'+':''}{realizedPnl.toFixed(2)}
               </p>
             </div>
           )}
@@ -454,6 +457,31 @@ export default function WorkspacePage() {
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, minHeight:0 }}>
 
           <div style={{ flex:1, minHeight:0, overflow:'hidden', position:'relative' }}>
+            {/* Fix 7: timeframe picker overlaid on chart top-left */}
+            <div style={{
+              position: 'absolute', top: 8, left: 8, zIndex: 10,
+              display: 'flex', gap: 4,
+            }}>
+              {TIMEFRAMES.map(tf => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  style={{
+                    padding: '2px 7px',
+                    fontSize: 11,
+                    fontWeight: timeframe === tf ? 700 : 400,
+                    borderRadius: 4,
+                    border: timeframe === tf ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                    background: timeframe === tf ? 'var(--accent-muted)' : 'var(--bg-secondary)',
+                    color: timeframe === tf ? 'var(--accent)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {tf.toUpperCase()}
+                </button>
+              ))}
+            </div>
             <WorkspaceChart
               candles={candles.slice(0, idx)}
               openTrades={openTr}
@@ -485,14 +513,7 @@ export default function WorkspacePage() {
                 className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{border:'1px solid var(--border-default)', color:'var(--text-secondary)'}}>→</button>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs" style={{color:'var(--text-muted)'}}>Timeframe</span>
-              <select value={timeframe} onChange={e=>setTimeframe(e.target.value as TimeFrame)}
-                className="rounded-lg px-2 py-1.5 text-xs outline-none cursor-pointer"
-                style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}>
-                {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
-              </select>
-            </div>
+
             {done && !accountBreached && (
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{background:'var(--accent-muted)', color:'var(--accent)', border:'1px solid var(--accent-border)'}}>
@@ -500,9 +521,6 @@ export default function WorkspacePage() {
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
-              <div className="h-1 rounded-full overflow-hidden" style={{background:'var(--border-subtle)', minWidth:80}}>
-                <div className="h-full rounded-full transition-all duration-300" style={{width:`${progress}%`, background:'var(--accent)'}}/>
-              </div>
               <span className="font-mono text-[10px] whitespace-nowrap" style={{color:'var(--text-muted)'}}>
                 {formatTime(m1Time, timezone)}
               </span>
