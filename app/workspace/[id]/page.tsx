@@ -598,6 +598,7 @@ export default function WorkspacePage() {
               drawings={drawings}
               onAddDrawing={d => { setDrawings(prev => [...prev, d]); setActiveTool(null) }}
               onDelDrawing={id => setDrawings(prev => prev.filter(d => d.id !== id))}
+              onUpdDrawing={d => setDrawings(prev => prev.map(x => x.id === d.id ? d : x))}
               indicatorConfig={overlayIndicatorConfig as any}
             />
           </div>

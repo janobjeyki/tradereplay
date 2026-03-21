@@ -32,6 +32,7 @@ interface Props {
   drawings?:     Drawing[]
   onAddDrawing?: (d: Drawing) => void
   onDelDrawing?: (id: string) => void
+  onUpdDrawing?: (d: Drawing) => void
   // Indicators
   indicatorConfig?: IndicatorConfig
 }
@@ -46,7 +47,7 @@ type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
   { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade,
-    activeTool = null, drawings = [], onAddDrawing, onDelDrawing,
+    activeTool = null, drawings = [], onAddDrawing, onDelDrawing, onUpdDrawing,
     indicatorConfig },
   ref
 ) {
@@ -569,6 +570,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         drawings={drawings}
         onAdd={d => onAddDrawing?.(d)}
         onDelete={id => onDelDrawing?.(id)}
+        onUpdate={d => onUpdDrawing?.(d)}
       />
 
       {/* Overlay */}
