@@ -66,8 +66,6 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
 
   // Fix 6: temp line shown while dragging from entry line to create SL/TP
   const [dragLine, setDragLine] = useState<{ y: number; isTP: boolean } | null>(null)
-  // Chart size for drawing layer
-  const [chartSize, setChartSize] = useState({ w: 0, h: 0 })
   // Expose chartRef to parent
   useImperativeHandle(ref, () => ({ chartRef: chartRef }))
 
@@ -324,7 +322,6 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         if (width > 0 && height > 0) {
           if (!initializedRef.current) initChart(width, height)
           else chartRef.current?.resize(width, height)
-          setChartSize({ w: width, h: height })
         }
       }
     })
@@ -554,14 +551,6 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
     })
   }, [candles, indicatorConfig])
 
-  // Coordinate converter for DrawingLayer
-  const coordConverter = useMemo(() => ({
-    priceToY: (p: number) => seriesRef.current?.priceToCoordinate(p) ?? null,
-    timeToX:  (t: number) => chartRef.current?.timeScale().timeToCoordinate(t) ?? null,
-    yToPrice: (y: number) => seriesRef.current?.coordinateToPrice(y) ?? null,
-    xToTime:  (x: number) => chartRef.current?.timeScale().coordinateToTime(x) ?? null,
-  }), [])
-
   // Use prop if provided (stable M1 price), fallback to last candle close
   const lastPrice = lastPriceProp ?? (candles.length > 0 ? candles[candles.length - 1].close : 0)
 
@@ -572,11 +561,11 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         style={{ width: '100%', height: '100%', display: 'block', cursor: activeTool ? 'crosshair' : cursorStyle }}
       />
       <DrawingLayer
-        width={chartSize.w}
-        height={chartSize.h}
+        seriesRef={seriesRef}
+        chartRef={chartRef}
+        containerRef={containerRef}
         activeTool={activeTool}
         drawings={drawings}
-        coords={coordConverter}
         onAdd={d => onAddDrawing?.(d)}
         onDelete={id => onDelDrawing?.(id)}
       />

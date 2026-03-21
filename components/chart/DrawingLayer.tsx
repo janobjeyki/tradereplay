@@ -4,19 +4,13 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import type { DrawingTool, Drawing, DrawPoint } from '@/lib/drawing-types'
 import { FIB_LEVELS, FIB_COLORS, uid } from '@/lib/drawing-types'
 
-interface Coords {
-  priceToY: (p: number) => number | null
-  timeToX:  (t: number) => number | null
-  yToPrice: (y: number) => number | null
-  xToTime:  (x: number) => number | null
-}
-
 interface Props {
-  width:       number
-  height:      number
+  // These come directly from the lightweight-charts series/chart objects
+  seriesRef:   React.MutableRefObject<any>
+  chartRef:    React.MutableRefObject<any>
+  containerRef: React.MutableRefObject<HTMLDivElement | null>
   activeTool:  DrawingTool
   drawings:    Drawing[]
-  coords:      Coords
   onAdd:       (d: Drawing) => void
   onDelete:    (id: string) => void
 }
@@ -33,282 +27,336 @@ const TOOL_COLOR: Partial<Record<NonNullable<DrawingTool>, string>> = {
   path:      '#f59e0b',
 }
 
-export function DrawingLayer({ width, height, activeTool, drawings, coords, onAdd, onDelete }: Props) {
+// Convert a stored DrawPoint to pixel coords using the chart APIs
+function toPixel(
+  pt: DrawPoint,
+  series: any,
+  chart: any,
+): { x: number; y: number } | null {
+  const y = series?.priceToCoordinate(pt.price)
+  const x = chart?.timeScale().timeToCoordinate(pt.time as any)
+  if (y == null || x == null) return null
+  return { x, y }
+}
+
+export function DrawingLayer({ seriesRef, chartRef, containerRef, activeTool, drawings, onAdd, onDelete }: Props) {
   const [pendingPts, setPendingPts] = useState<DrawPoint[]>([])
-  const [mousePos,   setMousePos]   = useState<{ x: number; y: number } | null>(null)
-  const brushPts = useRef<DrawPoint[]>([])
+  const [cursorPt,   setCursorPt]   = useState<DrawPoint | null>(null)
+  const [, forceRedraw] = useState(0)
+  const brushPts    = useRef<DrawPoint[]>([])
   const isBrushingRef = useRef(false)
-  const svgRef = useRef<SVGSVGElement>(null)
+  const svgRef      = useRef<SVGSVGElement>(null)
 
   // Reset pending when tool changes
   useEffect(() => {
     setPendingPts([])
+    setCursorPt(null)
     brushPts.current = []
     isBrushingRef.current = false
   }, [activeTool])
 
-  const getPoint = useCallback((e: React.MouseEvent<SVGSVGElement>): DrawPoint | null => {
-    const rect = svgRef.current!.getBoundingClientRect()
+  // Subscribe to crosshair to get accurate price+time at cursor
+  // This is the RELIABLE way to get chart coordinates from mouse position
+  useEffect(() => {
+    if (!chartRef.current || !activeTool) return
+    const handler = (param: any) => {
+      if (!param.time || !param.seriesData) return
+      // Get price from series data or from coordinate
+      const point = param.point
+      const time  = param.time
+      const price = seriesRef.current?.coordinateToPrice(point?.y)
+      if (price == null || time == null) return
+      // time is unix timestamp (number) for our data
+      const t = typeof time === 'number' ? time : 0
+      setCursorPt({ price, time: t })
+    }
+    chartRef.current.subscribeCrosshairMove(handler)
+    return () => { try { chartRef.current?.unsubscribeCrosshairMove(handler) } catch {} }
+  }, [activeTool, chartRef, seriesRef])
+
+  // Redraw whenever chart scrolls/zooms so drawings stay pinned
+  useEffect(() => {
+    if (!chartRef.current) return
+    const handler = () => forceRedraw(n => n + 1)
+    chartRef.current.timeScale().subscribeVisibleLogicalRangeChange(handler)
+    chartRef.current.subscribeCrosshairMove(handler)
+    return () => {
+      try { chartRef.current?.timeScale().unsubscribeVisibleLogicalRangeChange(handler) } catch {}
+      try { chartRef.current?.unsubscribeCrosshairMove(handler) } catch {}
+    }
+  }, [chartRef])
+
+  // Get a DrawPoint from a native mouse event using chart internals
+  const getPointFromEvent = useCallback((e: MouseEvent): DrawPoint | null => {
+    if (!containerRef.current || !seriesRef.current || !chartRef.current) return null
+    const rect = containerRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    const price = coords.yToPrice(y)
-    const time  = coords.xToTime(x)
-    if (price === null || time === null) return null
-    return { price, time: Math.floor(time as any) }
-  }, [coords])
-
-  const onClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!activeTool) return
-    const pt = getPoint(e)
-    if (!pt) return
-
-    // Single-click tools
-    if (activeTool === 'hline') {
-      onAdd({ id: uid(), type: 'hline', price: pt.price, color: TOOL_COLOR.hline! })
-      return
+    const price = seriesRef.current.coordinateToPrice(y)
+    // Get time: use coordinateToTime if available, else get logical index + time
+    let time: number | null = null
+    try {
+      const t = chartRef.current.timeScale().coordinateToTime(x)
+      if (t != null) time = typeof t === 'number' ? t : null
+    } catch {}
+    if (time == null) {
+      // fallback: use logical coordinate
+      try {
+        const logical = chartRef.current.timeScale().coordinateToLogical(x)
+        if (logical != null) {
+          const visRange = chartRef.current.timeScale().getVisibleRange()
+          if (visRange) time = Math.round(visRange.from + logical)
+        }
+      } catch {}
     }
-    if (activeTool === 'vline') {
-      onAdd({ id: uid(), type: 'vline', time: pt.time, color: TOOL_COLOR.vline! })
-      return
-    }
+    if (price == null || time == null) return null
+    return { price, time }
+  }, [containerRef, seriesRef, chartRef])
 
-    // Two-click tools
-    if (['trendline','rectangle','fibonacci','longpos','shortpos'].includes(activeTool)) {
-      if (pendingPts.length === 0) {
-        setPendingPts([pt])
-      } else {
-        const p1 = pendingPts[0]
-        const type = activeTool as 'trendline'|'rectangle'|'fibonacci'|'longpos'|'shortpos'
-        onAdd({ id: uid(), type, p1, p2: pt, color: TOOL_COLOR[activeTool]! })
-        setPendingPts([])
+  // Attach click/mousedown/mousemove/mouseup to containerRef (chart canvas)
+  useEffect(() => {
+    if (!containerRef.current || !activeTool) return
+    const el = containerRef.current
+
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('button')) return
+      const pt = getPointFromEvent(e)
+      if (!pt) return
+
+      if (activeTool === 'hline') {
+        onAdd({ id: uid(), type: 'hline', price: pt.price, color: TOOL_COLOR.hline! }); return
+      }
+      if (activeTool === 'vline') {
+        onAdd({ id: uid(), type: 'vline', time: pt.time, color: TOOL_COLOR.vline! }); return
+      }
+      if (['trendline','rectangle','fibonacci','longpos','shortpos'].includes(activeTool)) {
+        setPendingPts(prev => {
+          if (prev.length === 0) return [pt]
+          const type = activeTool as 'trendline'|'rectangle'|'fibonacci'|'longpos'|'shortpos'
+          onAdd({ id: uid(), type, p1: prev[0], p2: pt, color: TOOL_COLOR[activeTool]! })
+          return []
+        })
       }
     }
-  }, [activeTool, pendingPts, getPoint, onAdd])
 
-  const onMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (activeTool !== 'brush' && activeTool !== 'path') return
-    isBrushingRef.current = true
-    brushPts.current = []
-    const pt = getPoint(e)
-    if (pt) brushPts.current.push(pt)
-  }, [activeTool, getPoint])
-
-  const onMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = svgRef.current!.getBoundingClientRect()
-    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
-    if (isBrushingRef.current && (activeTool === 'brush' || activeTool === 'path')) {
-      const pt = getPoint(e)
+    const onMouseDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('button')) return
+      if (activeTool !== 'brush' && activeTool !== 'path') return
+      isBrushingRef.current = true
+      brushPts.current = []
+      const pt = getPointFromEvent(e)
       if (pt) brushPts.current.push(pt)
     }
-  }, [activeTool, getPoint])
 
-  const onMouseUp = useCallback(() => {
-    if (!isBrushingRef.current) return
-    isBrushingRef.current = false
-    if (brushPts.current.length > 1) {
-      onAdd({ id: uid(), type: 'brush', points: [...brushPts.current], color: TOOL_COLOR.brush! })
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isBrushingRef.current) return
+      const pt = getPointFromEvent(e)
+      if (pt) { brushPts.current.push(pt); forceRedraw(n => n + 1) }
     }
-    brushPts.current = []
-  }, [onAdd])
 
-  const onMouseLeave = useCallback(() => {
-    setMousePos(null)
-    if (isBrushingRef.current) onMouseUp()
-  }, [onMouseUp])
+    const onMouseUp = (e: MouseEvent) => {
+      if (!isBrushingRef.current) return
+      isBrushingRef.current = false
+      if (brushPts.current.length > 1) {
+        onAdd({ id: uid(), type: 'brush', points: [...brushPts.current], color: TOOL_COLOR.brush! })
+      }
+      brushPts.current = []
+    }
 
-  if (!activeTool && drawings.length === 0) return null
+    el.addEventListener('click',     onClick,     { capture: false })
+    el.addEventListener('mousedown', onMouseDown, { capture: false })
+    el.addEventListener('mousemove', onMouseMove, { capture: false })
+    el.addEventListener('mouseup',   onMouseUp,   { capture: false })
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      el.removeEventListener('click',     onClick)
+      el.removeEventListener('mousedown', onMouseDown)
+      el.removeEventListener('mousemove', onMouseMove)
+      el.removeEventListener('mouseup',   onMouseUp)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [activeTool, containerRef, getPointFromEvent, onAdd])
 
-  // ── Convert stored drawings to pixel shapes ────────────────────
+  if (!chartRef.current || !seriesRef.current) return null
+
+  const W = containerRef.current?.clientWidth  ?? 800
+  const H = containerRef.current?.clientHeight ?? 500
+
+  // ── Render a stored drawing ──────────────────────────────────────
   const renderDrawing = (d: Drawing) => {
-    const key = d.id
+    const s = seriesRef.current, ch = chartRef.current
     switch (d.type) {
+
       case 'hline': {
-        const y = coords.priceToY(d.price)
-        if (y === null) return null
+        const y = s.priceToCoordinate(d.price)
+        if (y == null) return null
         return (
-          <g key={key}>
-            <line x1={0} y1={y} x2={width} y2={y} stroke={d.color} strokeWidth={1.5} strokeDasharray="5,3" />
-            <text x={6} y={y - 3} fill={d.color} fontSize={10}>{d.price.toFixed(2)}</text>
-            <rect x={width - 16} y={y - 8} width={14} height={14} fill="transparent" style={{cursor:'pointer'}}
-              onClick={() => onDelete(d.id)} />
-            <text x={width - 14} y={y + 4} fill={d.color} fontSize={12} style={{cursor:'pointer'}}
-              onClick={() => onDelete(d.id)}>×</text>
+          <g key={d.id}>
+            <line x1={0} y1={y} x2={W} y2={y} stroke={d.color} strokeWidth={1.5} strokeDasharray="6,3" />
+            <rect x={4} y={y - 8} width={50} height={14} rx={2} fill={d.color} fillOpacity={0.15} />
+            <text x={6} y={y + 4} fill={d.color} fontSize={9} fontWeight={600}>{d.price.toFixed(2)}</text>
+            <text x={W - 18} y={y + 5} fill={d.color} fontSize={14} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)}>×</text>
           </g>
         )
       }
+
       case 'vline': {
-        const x = coords.timeToX(d.time)
-        if (x === null) return null
+        const x = ch.timeScale().timeToCoordinate(d.time as any)
+        if (x == null) return null
         return (
-          <g key={key}>
-            <line x1={x} y1={0} x2={x} y2={height} stroke={d.color} strokeWidth={1.5} strokeDasharray="5,3" />
-            <text x={x + 4} y={14} fill={d.color} fontSize={10} style={{cursor:'pointer'}}
-              onClick={() => onDelete(d.id)}>×</text>
+          <g key={d.id}>
+            <line x1={x} y1={0} x2={x} y2={H} stroke={d.color} strokeWidth={1.5} strokeDasharray="6,3" />
+            <text x={x + 4} y={16} fill={d.color} fontSize={13} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)}>×</text>
           </g>
         )
       }
+
       case 'trendline': {
-        const x1 = coords.timeToX(d.p1.time), y1 = coords.priceToY(d.p1.price)
-        const x2 = coords.timeToX(d.p2.time), y2 = coords.priceToY(d.p2.price)
-        if (x1 === null || y1 === null || x2 === null || y2 === null) return null
+        const a = toPixel(d.p1, s, ch), b = toPixel(d.p2, s, ch)
+        if (!a || !b) return null
         return (
-          <g key={key}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={d.color} strokeWidth={1.5} />
-            <circle cx={x1} cy={y1} r={4} fill={d.color} />
-            <circle cx={x2} cy={y2} r={4} fill={d.color} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)} />
+          <g key={d.id}>
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={d.color} strokeWidth={2} />
+            <circle cx={a.x} cy={a.y} r={4} fill={d.color} />
+            <circle cx={b.x} cy={b.y} r={4} fill={d.color} />
+            <text x={(a.x+b.x)/2} y={(a.y+b.y)/2 - 6} fill={d.color} fontSize={13} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)}>×</text>
           </g>
         )
       }
+
       case 'rectangle': {
-        const x1 = coords.timeToX(d.p1.time), y1 = coords.priceToY(d.p1.price)
-        const x2 = coords.timeToX(d.p2.time), y2 = coords.priceToY(d.p2.price)
-        if (x1 === null || y1 === null || x2 === null || y2 === null) return null
-        const rx = Math.min(x1, x2), ry = Math.min(y1, y2)
-        const rw = Math.abs(x2 - x1), rh = Math.abs(y2 - y1)
+        const a = toPixel(d.p1, s, ch), b = toPixel(d.p2, s, ch)
+        if (!a || !b) return null
+        const rx = Math.min(a.x,b.x), ry = Math.min(a.y,b.y)
+        const rw = Math.abs(b.x-a.x), rh = Math.abs(b.y-a.y)
         return (
-          <g key={key}>
+          <g key={d.id}>
             <rect x={rx} y={ry} width={rw} height={rh} stroke={d.color} strokeWidth={1.5}
-              fill={d.color} fillOpacity={0.08} />
-            <text x={rx + rw - 14} y={ry + 14} fill={d.color} fontSize={12} style={{cursor:'pointer'}}
-              onClick={() => onDelete(d.id)}>×</text>
+              fill={d.color} fillOpacity={0.07} />
+            <text x={rx+rw-16} y={ry+14} fill={d.color} fontSize={14} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)}>×</text>
           </g>
         )
       }
+
       case 'fibonacci': {
-        const x1 = coords.timeToX(d.p1.time), y1 = coords.priceToY(d.p1.price)
-        const x2 = coords.timeToX(d.p2.time), y2 = coords.priceToY(d.p2.price)
-        if (x1 === null || y1 === null || x2 === null || y2 === null) return null
-        const high = Math.min(y1, y2), low = Math.max(y1, y2)
-        const highP = coords.yToPrice(high)!, lowP = coords.yToPrice(low)!
-        const xStart = Math.min(x1, x2), xEnd = Math.max(x1, x2)
+        const a = toPixel(d.p1, s, ch), b = toPixel(d.p2, s, ch)
+        if (!a || !b) return null
+        const highY = Math.min(a.y,b.y), lowY = Math.max(a.y,b.y)
+        const highP = s.coordinateToPrice(highY) ?? 0
+        const lowP  = s.coordinateToPrice(lowY)  ?? 0
+        const xL    = Math.min(a.x,b.x), xR = Math.max(a.x,b.x)
         return (
-          <g key={key}>
+          <g key={d.id}>
             {FIB_LEVELS.map((lvl, i) => {
               const p = highP - (highP - lowP) * lvl
-              const y = coords.priceToY(p)
-              if (y === null) return null
+              const y = s.priceToCoordinate(p)
+              if (y == null) return null
               return (
                 <g key={lvl}>
-                  <line x1={xStart} y1={y} x2={xEnd} y2={y} stroke={FIB_COLORS[i]} strokeWidth={1} strokeDasharray="4,2" />
-                  <text x={xEnd + 4} y={y + 4} fill={FIB_COLORS[i]} fontSize={9}>{(lvl * 100).toFixed(1)}%</text>
+                  <line x1={xL} y1={y} x2={xR} y2={y} stroke={FIB_COLORS[i]} strokeWidth={1} strokeDasharray="5,3" />
+                  <text x={xR+3} y={y+4} fill={FIB_COLORS[i]} fontSize={9}>{(lvl*100).toFixed(1)}%  {p.toFixed(2)}</text>
                 </g>
               )
             })}
-            <text x={xEnd - 10} y={high - 6} fill={d.color} fontSize={12} style={{cursor:'pointer'}}
-              onClick={() => onDelete(d.id)}>×</text>
+            <text x={xL} y={highY-6} fill={d.color} fontSize={13} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)}>×</text>
           </g>
         )
       }
+
       case 'longpos':
       case 'shortpos': {
-        const isLong = d.type === 'longpos'
-        const xE = coords.timeToX(d.p1.time), yE = coords.priceToY(d.p1.price)
-        const xT = coords.timeToX(d.p2.time), yT = coords.priceToY(d.p2.price)
-        if (xE === null || yE === null || xT === null || yT === null) return null
-        const xRight = Math.max(xE, xT, 200)
-        // SL is mirror of TP around entry
-        const slPrice = d.p1.price - (d.p2.price - d.p1.price)
-        const yS = coords.priceToY(slPrice)
-        const profitColor = isLong ? '#22c55e' : '#ef4444'
-        const lossColor   = isLong ? '#ef4444' : '#22c55e'
+        const isLong    = d.type === 'longpos'
+        const entry     = toPixel(d.p1, s, ch)
+        const tpPx      = toPixel(d.p2, s, ch)
+        if (!entry || !tpPx) return null
+        const slPrice   = d.p1.price - (d.p2.price - d.p1.price)
+        const slY       = s.priceToCoordinate(slPrice)
+        const xR        = Math.min(W - 60, Math.max(entry.x, tpPx.x) + 120)
+        const pColor    = isLong ? '#22c55e' : '#ef4444'
+        const lColor    = isLong ? '#ef4444' : '#22c55e'
         return (
-          <g key={key}>
-            {/* TP zone */}
-            {yT !== null && (
-              <rect x={xE} y={Math.min(yE, yT)} width={xRight - xE}
-                height={Math.abs(yE - yT)} fill={profitColor} fillOpacity={0.12} />
+          <g key={d.id}>
+            {slY != null && (
+              <rect x={entry.x} y={Math.min(entry.y,slY)} width={xR-entry.x}
+                height={Math.abs(entry.y-slY)} fill={lColor} fillOpacity={0.10} />
             )}
-            {/* SL zone */}
-            {yS !== null && (
-              <rect x={xE} y={Math.min(yE, yS)} width={xRight - xE}
-                height={Math.abs(yE - yS)} fill={lossColor} fillOpacity={0.12} />
-            )}
-            {/* Entry line */}
-            <line x1={xE} y1={yE} x2={xRight} y2={yE} stroke="#3b82f6" strokeWidth={1.5} />
-            <text x={xE + 4} y={yE - 4} fill="#3b82f6" fontSize={10}>Entry {d.p1.price.toFixed(2)}</text>
-            {/* TP line */}
-            {yT !== null && (
-              <>
-                <line x1={xE} y1={yT} x2={xRight} y2={yT} stroke={profitColor} strokeWidth={1.5} strokeDasharray="5,3" />
-                <text x={xE + 4} y={yT - 4} fill={profitColor} fontSize={10}>TP {d.p2.price.toFixed(2)}</text>
-              </>
-            )}
-            {/* SL line */}
-            {yS !== null && (
-              <>
-                <line x1={xE} y1={yS} x2={xRight} y2={yS} stroke={lossColor} strokeWidth={1.5} strokeDasharray="5,3" />
-                <text x={xE + 4} y={yS + 12} fill={lossColor} fontSize={10}>SL {slPrice.toFixed(2)}</text>
-              </>
-            )}
-            <text x={xRight - 14} y={yE - 4} fill="#3b82f6" fontSize={12} style={{cursor:'pointer'}}
-              onClick={() => onDelete(d.id)}>×</text>
+            <rect x={entry.x} y={Math.min(entry.y,tpPx.y)} width={xR-entry.x}
+              height={Math.abs(entry.y-tpPx.y)} fill={pColor} fillOpacity={0.10} />
+            <line x1={entry.x} y1={entry.y} x2={xR} y2={entry.y} stroke="#3b82f6" strokeWidth={2} />
+            <line x1={entry.x} y1={tpPx.y} x2={xR} y2={tpPx.y} stroke={pColor} strokeWidth={1.5} strokeDasharray="5,3" />
+            {slY != null && <line x1={entry.x} y1={slY} x2={xR} y2={slY} stroke={lColor} strokeWidth={1.5} strokeDasharray="5,3" />}
+            <text x={entry.x+4} y={entry.y-4} fill="#3b82f6" fontSize={10}>Entry {d.p1.price.toFixed(2)}</text>
+            <text x={entry.x+4} y={tpPx.y-4} fill={pColor} fontSize={10}>TP {d.p2.price.toFixed(2)}</text>
+            {slY != null && <text x={entry.x+4} y={slY+12} fill={lColor} fontSize={10}>SL {slPrice.toFixed(2)}</text>}
+            <text x={xR-4} y={entry.y-4} fill="#3b82f6" fontSize={13} style={{cursor:'pointer'}} onClick={() => onDelete(d.id)}>×</text>
           </g>
         )
       }
+
       case 'brush': {
         if (d.points.length < 2) return null
         const pts = d.points.map(p => {
-          const x = coords.timeToX(p.time), y = coords.priceToY(p.price)
-          if (x === null || y === null) return null
-          return `${x},${y}`
-        }).filter(Boolean)
-        if (pts.length < 2) return null
+          const px = toPixel(p, s, ch)
+          return px ? `${px.x},${px.y}` : null
+        }).filter(Boolean).join(' ')
         return (
-          <g key={key}>
-            <polyline points={pts.join(' ')} stroke={d.color} strokeWidth={2} fill="none"
+          <g key={d.id}>
+            <polyline points={pts} stroke={d.color} strokeWidth={2} fill="none"
               strokeLinecap="round" strokeLinejoin="round" />
           </g>
         )
       }
     }
+    return null
   }
 
-  // ── Preview while placing ──────────────────────────────────────
+  // ── Preview ──────────────────────────────────────────────────────
   const renderPreview = () => {
-    if (!mousePos || !activeTool) return null
-    const { x: mx, y: my } = mousePos
+    if (!cursorPt && !isBrushingRef.current) return null
+    const s = seriesRef.current, ch = chartRef.current
 
-    if (activeTool === 'hline') {
-      return <line x1={0} y1={my} x2={width} y2={my} stroke={TOOL_COLOR.hline!} strokeWidth={1} strokeDasharray="4,2" opacity={0.6} />
+    if (activeTool === 'hline' && cursorPt) {
+      const y = s.priceToCoordinate(cursorPt.price)
+      if (y == null) return null
+      return <line x1={0} y1={y} x2={W} y2={y} stroke={TOOL_COLOR.hline!} strokeWidth={1} strokeDasharray="5,3" opacity={0.5} />
     }
-    if (activeTool === 'vline') {
-      return <line x1={mx} y1={0} x2={mx} y2={height} stroke={TOOL_COLOR.vline!} strokeWidth={1} strokeDasharray="4,2" opacity={0.6} />
+    if (activeTool === 'vline' && cursorPt) {
+      const x = ch.timeScale().timeToCoordinate(cursorPt.time as any)
+      if (x == null) return null
+      return <line x1={x} y1={0} x2={x} y2={H} stroke={TOOL_COLOR.vline!} strokeWidth={1} strokeDasharray="5,3" opacity={0.5} />
     }
-    if (pendingPts.length === 1 && ['trendline','rectangle','fibonacci','longpos','shortpos'].includes(activeTool)) {
-      const p1 = pendingPts[0]
-      const x1 = coords.timeToX(p1.time), y1 = coords.priceToY(p1.price)
-      if (x1 === null || y1 === null) return null
+    if (pendingPts.length === 1 && cursorPt) {
+      const a = toPixel(pendingPts[0], s, ch)
+      const b = { x: ch.timeScale().timeToCoordinate(cursorPt.time as any) ?? 0, y: s.priceToCoordinate(cursorPt.price) ?? 0 }
+      if (!a) return null
       if (activeTool === 'trendline') {
-        return <line x1={x1} y1={y1} x2={mx} y2={my} stroke={TOOL_COLOR.trendline!} strokeWidth={1.5} opacity={0.7} />
+        return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={TOOL_COLOR.trendline!} strokeWidth={1.5} opacity={0.6} />
       }
       if (activeTool === 'rectangle') {
-        return <rect x={Math.min(x1,mx)} y={Math.min(y1,my)} width={Math.abs(mx-x1)} height={Math.abs(my-y1)}
-          stroke={TOOL_COLOR.rectangle!} strokeWidth={1.5} fill={TOOL_COLOR.rectangle!} fillOpacity={0.06} opacity={0.7} />
+        return <rect x={Math.min(a.x,b.x)} y={Math.min(a.y,b.y)} width={Math.abs(b.x-a.x)} height={Math.abs(b.y-a.y)}
+          stroke={TOOL_COLOR.rectangle!} strokeWidth={1.5} fill={TOOL_COLOR.rectangle!} fillOpacity={0.05} opacity={0.7} />
       }
       if (activeTool === 'fibonacci') {
-        return <line x1={x1} y1={y1} x2={mx} y2={my} stroke={TOOL_COLOR.fibonacci!} strokeWidth={1} strokeDasharray="3,2" opacity={0.6} />
+        return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={TOOL_COLOR.fibonacci!} strokeWidth={1} strokeDasharray="4,2" opacity={0.6} />
       }
       if (activeTool === 'longpos' || activeTool === 'shortpos') {
         const isLong = activeTool === 'longpos'
         return (
           <>
-            <line x1={x1} y1={y1} x2={mx} y2={y1} stroke="#3b82f6" strokeWidth={1.5} opacity={0.8} />
-            <line x1={x1} y1={my} x2={mx} y2={my} stroke={isLong ? '#22c55e' : '#ef4444'} strokeWidth={1} strokeDasharray="4,2" opacity={0.7} />
-            <rect x={x1} y={Math.min(y1,my)} width={mx-x1} height={Math.abs(my-y1)}
-              fill={isLong ? '#22c55e' : '#ef4444'} fillOpacity={0.08} />
+            <line x1={a.x} y1={a.y} x2={b.x} y2={a.y} stroke="#3b82f6" strokeWidth={1.5} opacity={0.8} />
+            <line x1={a.x} y1={b.y} x2={b.x} y2={b.y} stroke={isLong?'#22c55e':'#ef4444'} strokeWidth={1} strokeDasharray="4,2" opacity={0.7} />
+            <rect x={Math.min(a.x,b.x)} y={Math.min(a.y,b.y)} width={Math.abs(b.x-a.x)} height={Math.abs(b.y-a.y)}
+              fill={isLong?'#22c55e':'#ef4444'} fillOpacity={0.07} />
           </>
         )
       }
     }
     if ((activeTool === 'brush' || activeTool === 'path') && isBrushingRef.current && brushPts.current.length > 1) {
       const pts = brushPts.current.map(p => {
-        const x = coords.timeToX(p.time), y = coords.priceToY(p.price)
-        if (x === null || y === null) return null
-        return `${x},${y}`
-      }).filter(Boolean)
-      if (pts.length > 1) {
-        return <polyline points={pts.join(' ')} stroke={TOOL_COLOR.brush!} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.7} />
-      }
+        const px = toPixel(p, s, ch)
+        return px ? `${px.x},${px.y}` : null
+      }).filter(Boolean).join(' ')
+      return <polyline points={pts} stroke={TOOL_COLOR.brush!} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.7} />
     }
     return null
   }
@@ -317,17 +365,12 @@ export function DrawingLayer({ width, height, activeTool, drawings, coords, onAd
     <svg
       ref={svgRef}
       style={{
-        position: 'absolute', inset: 0, width: '100%', height: '100%',
-        cursor: activeTool ? 'crosshair' : 'default',
-        pointerEvents: activeTool ? 'all' : 'none',
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        pointerEvents: 'none',  // chart canvas handles events, we just render
         zIndex: 5,
         overflow: 'visible',
       }}
-      onClick={onClick}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseLeave}
     >
       {drawings.map(d => renderDrawing(d))}
       {renderPreview()}
