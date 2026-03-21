@@ -566,23 +566,33 @@ export default function WorkspacePage() {
                               <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
                               <td className="px-3 py-2 font-mono">
                                 {tr.stop_loss ? (
-                                  <span style={{display:'inline-flex', alignItems:'center', gap:3}}>
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:5}}>
                                     <span style={{color:'var(--red)'}}>{fmtPrice(tr.stop_loss, sym.decimals)}</span>
                                     <button onClick={() => handleSetSL(tr.id, 0)} title="Remove SL" style={{
-                                      background:'none', border:'none', color:'var(--red)', cursor:'pointer',
-                                      fontSize:12, fontWeight:700, padding:'0 1px', lineHeight:1, opacity:0.7,
-                                    }}>×</button>
+                                      background:'#ef4444', border:'none', borderRadius:5,
+                                      width:16, height:16, display:'inline-flex', alignItems:'center',
+                                      justifyContent:'center', cursor:'pointer', padding:0, flexShrink:0,
+                                    }}>
+                                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                        <path d="M1 1l6 6M7 1L1 7" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+                                      </svg>
+                                    </button>
                                   </span>
                                 ) : <span style={{color:'var(--text-muted)'}}>—</span>}
                               </td>
                               <td className="px-3 py-2 font-mono">
                                 {tr.take_profit ? (
-                                  <span style={{display:'inline-flex', alignItems:'center', gap:3}}>
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:5}}>
                                     <span style={{color:'var(--green)'}}>{fmtPrice(tr.take_profit, sym.decimals)}</span>
                                     <button onClick={() => handleSetTP(tr.id, 0)} title="Remove TP" style={{
-                                      background:'none', border:'none', color:'var(--red)', cursor:'pointer',
-                                      fontSize:12, fontWeight:700, padding:'0 1px', lineHeight:1, opacity:0.7,
-                                    }}>×</button>
+                                      background:'#ef4444', border:'none', borderRadius:5,
+                                      width:16, height:16, display:'inline-flex', alignItems:'center',
+                                      justifyContent:'center', cursor:'pointer', padding:0, flexShrink:0,
+                                    }}>
+                                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                        <path d="M1 1l6 6M7 1L1 7" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+                                      </svg>
+                                    </button>
                                   </span>
                                 ) : <span style={{color:'var(--text-muted)'}}>—</span>}
                               </td>
