@@ -101,17 +101,35 @@ export function DrawingLayer({
     isBrushing.current = false
   }, [activeTool])
 
-  // Redraw on chart scroll/zoom
+  // Redraw on chart scroll/zoom — RAF delays until AFTER chart finishes painting
   useEffect(() => {
     const ch = chartRef.current
     if (!ch) return
-    ch.timeScale().subscribeVisibleLogicalRangeChange(redraw)
-    ch.subscribeCrosshairMove(redraw)
-    return () => {
-      try { ch.timeScale().unsubscribeVisibleLogicalRangeChange(redraw) } catch {}
-      try { ch.unsubscribeCrosshairMove(redraw) } catch {}
+    let rafId = 0
+    const handler = () => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => setTick(n => n + 1))
     }
-  }, [chartRef, redraw])
+    ch.timeScale().subscribeVisibleLogicalRangeChange(handler)
+    ch.subscribeCrosshairMove(handler)
+    return () => {
+      cancelAnimationFrame(rafId)
+      try { ch.timeScale().unsubscribeVisibleLogicalRangeChange(handler) } catch {}
+      try { ch.unsubscribeCrosshairMove(handler) } catch {}
+    }
+  }, [chartRef])
+
+  // Continuous RAF loop — keeps drawings synced to chart on every animation frame
+  // This is the only truly reliable way since chart coordinate APIs update mid-frame
+  useEffect(() => {
+    let rafId = 0
+    const loop = () => {
+      setTick(n => n + 1)
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
 
   // Mouse event handlers on chart canvas
   useEffect(() => {
