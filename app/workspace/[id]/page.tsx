@@ -379,15 +379,6 @@ export default function WorkspacePage() {
   const m1Total    = m1All.length
   const m1Playable = m1Total - playableStartIdxRef.current
 
-  // Build overlay indicator config from toggles
-      { period: 20,  color: '#f59e0b' },
-      { period: 50,  color: '#3b82f6' },
-      { period: 200, color: '#ef4444' },
-    ]} : { enabled: false, lines: [] },
-      { period: 9,   color: '#a78bfa' },
-      { period: 21,  color: '#60a5fa' },
-    ]} : { enabled: false, lines: [] },
-  }
   const progress   = m1Playable > 0
     ? Math.round(Math.max(0, m1AbsIdx - playableStartIdxRef.current) / m1Playable * 100)
     : 0
