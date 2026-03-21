@@ -4,8 +4,6 @@ import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImper
 import type { Candle, Trade, Symbol } from '@/types'
 import { useTheme } from '@/contexts/ThemeContext'
 import { calcPnl } from '@/lib/utils'
-import { DrawingLayer } from './DrawingLayer'
-import type { DrawingTool, Drawing } from '@/lib/drawing-types'
 import type { IndicatorConfig } from './IndicatorPanes'
 import { sma, ema, bollingerBands, vwap, toLineSeries } from '@/lib/indicators'
 
@@ -27,12 +25,6 @@ interface Props {
   onSetSL?:      (tradeId: string, price: number) => void
   onSetTP?:      (tradeId: string, price: number) => void
   onCloseTrade?: (tradeId: string) => void
-  // Drawing tools
-  activeTool?:   DrawingTool
-  drawings?:     Drawing[]
-  onAddDrawing?: (d: Drawing) => void
-  onDelDrawing?: (id: string) => void
-  onUpdDrawing?: (d: Drawing) => void
   // Indicators
   indicatorConfig?: IndicatorConfig
 }
@@ -47,7 +39,6 @@ type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
   { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade,
-    activeTool = null, drawings = [], onAddDrawing, onDelDrawing, onUpdDrawing,
     indicatorConfig },
   ref
 ) {
@@ -560,17 +551,6 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       <div
         ref={containerRef}
         style={{ width: '100%', height: '100%', display: 'block', cursor: activeTool ? 'crosshair' : cursorStyle }}
-      />
-      <DrawingLayer
-        seriesRef={seriesRef}
-        chartRef={chartRef}
-        containerRef={containerRef}
-        candles={candles}
-        activeTool={activeTool}
-        drawings={drawings}
-        onAdd={d => onAddDrawing?.(d)}
-        onDelete={id => onDelDrawing?.(id)}
-        onUpdate={d => onUpdDrawing?.(d)}
       />
 
       {/* Overlay */}
