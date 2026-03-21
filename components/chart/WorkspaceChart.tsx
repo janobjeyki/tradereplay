@@ -173,6 +173,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
 
         // ── Fix 2: capture phase intercepts before chart panning starts ──
         const onMouseDown = (e: MouseEvent) => {
+          // Don't intercept clicks on buttons (e.g. × to remove SL/TP)
+          if ((e.target as HTMLElement).tagName === 'BUTTON') return
           if (!seriesRef.current) return
           const rect = el.getBoundingClientRect()
           const y    = e.clientY - rect.top

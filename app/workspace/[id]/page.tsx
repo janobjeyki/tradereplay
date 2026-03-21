@@ -77,21 +77,41 @@ export default function WorkspacePage() {
 
   useEffect(() => { if (user && id) init() }, [user, id])
 
-  // Timeframe switch: re-aggregate, find new idx using m1AbsIdx (never changes here)
-  useEffect(() => {
+  // Keep a ref to current timeframe so effects can read it without stale closure
+  const timeframeRef = useRef<TimeFrame>(timeframe)
+  useEffect(() => { timeframeRef.current = timeframe }, [timeframe])
+
+  // Re-aggregate helper — used by both TF switch and tab-restore
+  const applyTimeframe = useCallback((tf: TimeFrame) => {
     const m1All = originalCandlesRef.current
     if (!m1All.length) return
-    const curM1Ts  = m1All[stateRef.current.m1AbsIdx]?.time ?? 0
-    const aggregated = aggregateCandles(m1All, timeframe)
+    const curM1Ts    = m1All[stateRef.current.m1AbsIdx]?.time ?? 0
+    const aggregated = aggregateCandles(m1All, tf)
     setCandles(aggregated)
-    // Find last aggregated candle whose open time <= current M1 timestamp
     let newIdx = Math.max(1, playableStartIdxRef.current)
     for (let i = 0; i < aggregated.length; i++) {
       if (aggregated[i].time <= curM1Ts) newIdx = i + 1
       else break
     }
     setIdx(Math.min(newIdx, aggregated.length))
-  }, [timeframe])
+  }, [])
+
+  // Timeframe switch
+  useEffect(() => {
+    applyTimeframe(timeframe)
+  }, [timeframe, applyTimeframe])
+
+  // Bug 1: tab restore — when page becomes visible again, re-apply current TF
+  // (chart unmount/remount resets candles to M1 raw data)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && originalCandlesRef.current.length) {
+        applyTimeframe(timeframeRef.current)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [applyTimeframe])
 
   async function init() {
     const { data: sess } = await supabase.from('sessions').select('*').eq('id', id).single()
@@ -428,7 +448,7 @@ export default function WorkspacePage() {
         <div className="ml-auto flex items-center gap-4 shrink-0">
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Equity</p>
-            <p className="font-mono font-bold text-base" style={{color: equity >= balance ? 'var(--accent)' : 'var(--red)'}}>
+            <p className="font-mono font-bold text-base" style={{color:'var(--accent)'}}>
               {fmtMoney(equity)}
             </p>
           </div>
