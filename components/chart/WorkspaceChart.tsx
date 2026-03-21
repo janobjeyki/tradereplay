@@ -142,12 +142,14 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
         })
 
         const series = chart.addCandlestickSeries({
-          upColor:         '#22c55e',
-          downColor:       '#ef4444',
-          borderUpColor:   '#22c55e',
-          borderDownColor: '#ef4444',
-          wickUpColor:     '#22c55e',
-          wickDownColor:   '#ef4444',
+          upColor:          '#22c55e',
+          downColor:        '#ef4444',
+          borderUpColor:    '#22c55e',
+          borderDownColor:  '#ef4444',
+          wickUpColor:      '#22c55e',
+          wickDownColor:    '#ef4444',
+          lastValueVisible: false,   // we draw our own stable M1 price line
+          priceLineVisible: false,   // hide the dashed last-candle line
         })
 
         chartRef.current  = chart
@@ -380,6 +382,28 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
       syncPositions()
     })
   }, [openTrades, syncPositions])
+  // ── Live M1 price line — stable across TF switches ───────────────
+  const m1PriceLineRef = useRef<any>(null)
+  useEffect(() => {
+    if (!seriesRef.current || !lastPriceProp) return
+    import('lightweight-charts').then(({ LineStyle }) => {
+      if (!seriesRef.current) return
+      try {
+        if (m1PriceLineRef.current) {
+          m1PriceLineRef.current.applyOptions({ price: lastPriceProp })
+        } else {
+          m1PriceLineRef.current = seriesRef.current.createPriceLine({
+            price:            lastPriceProp,
+            color:            '#3b82f6',
+            lineWidth:        1,
+            lineStyle:        LineStyle.Dotted,
+            axisLabelVisible: true,
+            title:            '',
+          })
+        }
+      } catch {}
+    })
+  }, [lastPriceProp])
 
   // ── Cursor: change to ns-resize when hovering near any draggable line ──
   useEffect(() => {
