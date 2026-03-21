@@ -30,17 +30,9 @@ const TIMEZONES = [
   { value: 'AEDT', label: 'AEDT (Sydney)',offset: 11 },
 ]
 
-// Seconds per candle for each timeframe
 const TF_SECONDS: Record<TimeFrame, number> = {
-  m1:  60,
-  m5:  300,
-  m15: 900,
-  m30: 1800,
-  h1:  3600,
-  h4:  14400,
-  d1:  86400,
-  w1:  604800,
-  M1:  2592000,
+  m1: 60, m5: 300, m15: 900, m30: 1800,
+  h1: 3600, h4: 14400, d1: 86400, w1: 604800, M1: 2592000,
 }
 
 export default function WorkspacePage() {
@@ -69,32 +61,33 @@ export default function WorkspacePage() {
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
 
-  // simTimestampRef: unix seconds of last M1 candle — single source of truth for time
-  const simTimestampRef     = useRef<number>(0)
-  // m1AbsIdxRef: absolute index into originalCandlesRef of last M1 candle (for DB save/reload)
-  const m1AbsIdxRef         = useRef<number>(0)
+  // ── Single source of truth: absolute index into originalCandlesRef (M1) ──
+  // This is STATE so it triggers re-renders. All derived values (price, time) 
+  // come from this — it never changes when TF switches, only when advancing.
+  const [m1AbsIdx, setM1AbsIdx] = useState(0)
 
   const originalCandlesRef  = useRef<Candle[]>([])
   const playableStartIdxRef = useRef<number>(0)
-  const stateRef            = useRef({ candles, idx, trades, balance })
+  const stateRef            = useRef({ candles, idx, trades, balance, m1AbsIdx })
   const symRef              = useRef<Symbol>(getSymbol('XAUUSD'))
-  // m1Price state: triggers re-render on price change, stable across TF switches
-  const [m1Price, setM1Price] = useState<number>(0)
 
-  useEffect(() => { stateRef.current = { candles, idx, trades, balance } }, [candles, idx, trades, balance])
+  useEffect(() => {
+    stateRef.current = { candles, idx, trades, balance, m1AbsIdx }
+  }, [candles, idx, trades, balance, m1AbsIdx])
+
   useEffect(() => { if (user && id) init() }, [user, id])
 
-  // Fix 2: timeframe switch — re-aggregate and find idx using simTimestampRef (never drifts)
+  // Timeframe switch: re-aggregate, find new idx using m1AbsIdx (never changes here)
   useEffect(() => {
-    if (!originalCandlesRef.current.length) return
-    const simTs      = simTimestampRef.current
-    const aggregated = aggregateCandles(originalCandlesRef.current, timeframe)
+    const m1All = originalCandlesRef.current
+    if (!m1All.length) return
+    const curM1Ts  = m1All[stateRef.current.m1AbsIdx]?.time ?? 0
+    const aggregated = aggregateCandles(m1All, timeframe)
     setCandles(aggregated)
-
-    // Find the last aggregated candle whose open time <= simTs
-    let newIdx = playableStartIdxRef.current > 0 ? playableStartIdxRef.current : 1
+    // Find last aggregated candle whose open time <= current M1 timestamp
+    let newIdx = Math.max(1, playableStartIdxRef.current)
     for (let i = 0; i < aggregated.length; i++) {
-      if (aggregated[i].time <= simTs) newIdx = i + 1
+      if (aggregated[i].time <= curM1Ts) newIdx = i + 1
       else break
     }
     setIdx(Math.min(newIdx, aggregated.length))
@@ -109,27 +102,22 @@ export default function WorkspacePage() {
     symRef.current = getSymbol(s.symbol)
 
     let m1: Candle[]
-    try {
-      m1 = await loadXauUsdData()
-    } catch {
+    try { m1 = await loadXauUsdData() }
+    catch {
       const { data: cache } = await supabase.from('candle_cache').select('candles').eq('session_id', id).single()
       m1 = (cache?.candles as Candle[]) ?? []
     }
-
     if (!m1.length) {
-      alert('Failed to load chart data. Make sure xauusd-m1-2025.csv is in the public/ folder.')
-      router.push('/dashboard/sessions')
-      return
+      alert('Failed to load chart data.')
+      router.push('/dashboard/sessions'); return
     }
 
-    const startTs   = Math.floor(new Date(s.start_date).getTime() / 1000)
-    const endTs     = Math.floor(new Date(s.end_date).getTime()   / 1000) + 86400
+    const startTs    = Math.floor(new Date(s.start_date).getTime() / 1000)
+    const endTs      = Math.floor(new Date(s.end_date).getTime()   / 1000) + 86400
     const allUpToEnd = m1.filter(c => c.time <= endTs)
-
     if (!allUpToEnd.length) {
       alert('No candles found for the selected date range.')
-      router.push('/dashboard/sessions')
-      return
+      router.push('/dashboard/sessions'); return
     }
 
     let playableStart = allUpToEnd.findIndex(c => c.time >= startTs)
@@ -138,28 +126,19 @@ export default function WorkspacePage() {
     originalCandlesRef.current  = allUpToEnd
     playableStartIdxRef.current = playableStart
 
-    // startIdx unused — computed below via savedM1AbsIdx
-
-    // Restore from saved absolute M1 index (candle_index now stores absolute M1 idx)
-    // Legacy: if candle_index < playableStart it was old relative format, treat as 0 progress
-    let savedM1AbsIdx = 0
+    // Restore saved absolute M1 index
+    let savedM1Abs = playableStart
     if (s.candle_index > playableStart) {
-      // New format: absolute M1 index
-      savedM1AbsIdx = Math.min(s.candle_index, allUpToEnd.length - 1)
+      // New format: already absolute
+      savedM1Abs = Math.min(s.candle_index, allUpToEnd.length - 1)
     } else if (s.candle_index > 0) {
-      // Old format: relative candle count — convert to absolute
-      savedM1AbsIdx = Math.min(playableStart + s.candle_index, allUpToEnd.length - 1)
-    } else {
-      savedM1AbsIdx = playableStart
+      // Legacy format: relative count
+      savedM1Abs = Math.min(playableStart + s.candle_index, allUpToEnd.length - 1)
     }
 
-    const m1AtStart = allUpToEnd[savedM1AbsIdx]
-    simTimestampRef.current = m1AtStart?.time ?? startTs
-    m1AbsIdxRef.current     = savedM1AbsIdx
-    setM1Price(m1AtStart?.close ?? 0)
-
+    setM1AbsIdx(savedM1Abs)
     setCandles(allUpToEnd)
-    setIdx(savedM1AbsIdx + 1)
+    setIdx(savedM1Abs + 1)
 
     const { data: openTrades } = await supabase
       .from('trades').select('*').eq('session_id', id).eq('status', 'open')
@@ -167,11 +146,8 @@ export default function WorkspacePage() {
     setLoading(false)
   }
 
-  // Fix 1 helper: close all open trades at a given price, return total PnL delta
   const closeAllOpenTrades = useCallback(async (
-    openTrades: Trade[],
-    exitPrice: number,
-    atIdx: number,
+    openTrades: Trade[], exitPrice: number, atIdx: number,
   ): Promise<number> => {
     const cs = symRef.current.contractSize
     let delta = 0
@@ -187,14 +163,15 @@ export default function WorkspacePage() {
 
   const advance = useCallback(async (steps: number) => {
     if (accountBreached) return
-    const { candles: c, idx: i, trades: tr, balance: bal } = stateRef.current
+    const { candles: c, idx: i, trades: tr, balance: bal, m1AbsIdx: curM1Abs } = stateRef.current
     if (!c.length) return
-    const cs  = symRef.current.contractSize
-    const end = Math.min(i + steps, c.length)
+    const m1All = originalCandlesRef.current
+    const cs    = symRef.current.contractSize
+    const end   = Math.min(i + steps, c.length)
     const slice = c.slice(i, end)
+
     let updatedTrades = [...tr]
     let deltaBal      = 0
-
     for (const candle of slice) {
       updatedTrades = updatedTrades.map(trade => {
         if (trade.status !== 'open') return trade
@@ -215,33 +192,26 @@ export default function WorkspacePage() {
       }).eq('id', trade.id)
     }
 
-    // Advance simulation timestamp
-    simTimestampRef.current += steps * TF_SECONDS[timeframe as TimeFrame]
-    // Find absolute M1 candle index at new simTimestamp
-    const m1All = originalCandlesRef.current
-    let newM1AbsIdx = m1AbsIdxRef.current
-    for (let i = m1All.length - 1; i >= 0; i--) {
-      if (m1All[i].time <= simTimestampRef.current) { newM1AbsIdx = i; break }
+    // Advance M1 absolute index by steps × TF_SECONDS worth of M1 candles
+    const targetTs = (m1All[curM1Abs]?.time ?? 0) + steps * TF_SECONDS[timeframe]
+    let newM1Abs   = curM1Abs
+    for (let j = m1All.length - 1; j >= 0; j--) {
+      if (m1All[j].time <= targetTs) { newM1Abs = j; break }
     }
-    m1AbsIdxRef.current = newM1AbsIdx
-    const newM1Price = m1All[newM1AbsIdx]?.close ?? 0
-    setM1Price(newM1Price)
 
-    const newBal   = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
+    const newBal     = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
     const lastCandle = c[end - 1]
     const stillOpen  = updatedTrades.filter(t => t.status === 'open')
     const unrealised = lastCandle
       ? stillOpen.reduce((a, t) => a + calcPnl(t.side, t.entry_price, lastCandle.close, t.quantity, cs), 0)
       : 0
-    const equity   = newBal + unrealised
-    const breached = equity <= 0
+    const breached = newBal + unrealised <= 0
 
-    // Fix 1: if account breached, close all remaining open trades at last price
-    let finalBal = newBal
+    let finalBal    = newBal
     let finalTrades = updatedTrades
     if (breached && stillOpen.length > 0 && lastCandle) {
       const closePnl = await closeAllOpenTrades(stillOpen, lastCandle.close, end)
-      finalBal = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
+      finalBal    = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
       finalTrades = updatedTrades.map(t =>
         t.status === 'open'
           ? { ...t, status: 'closed' as const, exit_price: lastCandle.close,
@@ -254,10 +224,11 @@ export default function WorkspacePage() {
     setBalance(finalBal)
     setTrades(finalTrades)
     setIdx(end)
+    setM1AbsIdx(newM1Abs)   // ← single state update drives price + time
     if (breached) setAccountBreached(true)
 
     await supabase.from('sessions').update({
-      candle_index: newM1AbsIdx,  // absolute M1 index for reload
+      candle_index: newM1Abs,   // absolute M1 index
       end_capital:  finalBal,
       is_completed: end >= c.length || breached,
     }).eq('id', id)
@@ -268,7 +239,9 @@ export default function WorkspacePage() {
     const { candles: c, idx: i } = stateRef.current
     const cur = c[i - 1]
     if (!cur || !session) return
-    const entry = cur.close
+    // Use real M1 price as entry
+    const m1Now = originalCandlesRef.current[stateRef.current.m1AbsIdx]
+    const entry = m1Now?.close ?? cur.close
 
     if (slVal) {
       const sl = parseFloat(slVal)
@@ -304,36 +277,35 @@ export default function WorkspacePage() {
     const cur   = c[i - 1]
     const trade = stateRef.current.trades.find(t => t.id === tradeId)
     if (!cur || !trade) return
-    const cs     = symRef.current.contractSize
-    const pnl    = calcPnl(trade.side, trade.entry_price, cur.close, trade.quantity, cs)
-    const newBal = parseFloat(Math.max(0, bal + pnl).toFixed(2))
+    const cs       = symRef.current.contractSize
+    const m1Now    = originalCandlesRef.current[stateRef.current.m1AbsIdx]
+    const exitPrice = m1Now?.close ?? cur.close
+    const pnl      = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
+    const newBal   = parseFloat(Math.max(0, bal + pnl).toFixed(2))
 
     const remaining  = stateRef.current.trades.filter(t => t.status === 'open' && t.id !== tradeId)
-    const unrealised = remaining.reduce((a, t) => a + calcPnl(t.side, t.entry_price, cur.close, t.quantity, cs), 0)
+    const unrealised = remaining.reduce((a, t) => a + calcPnl(t.side, t.entry_price, exitPrice, t.quantity, cs), 0)
     const breached   = newBal + unrealised <= 0
 
     await supabase.from('trades').update({
-      status: 'closed', exit_price: cur.close, pnl, closed_at_idx: i,
+      status: 'closed', exit_price: exitPrice, pnl, closed_at_idx: i,
     }).eq('id', tradeId)
     await supabase.from('sessions').update({ end_capital: newBal }).eq('id', id)
 
-    // Fix 1: if breached, close remaining open trades too
     let finalBal = newBal
     let closedRemaining: Trade[] = []
     if (breached && remaining.length > 0) {
-      const closePnl = await closeAllOpenTrades(remaining, cur.close, i)
+      const closePnl = await closeAllOpenTrades(remaining, exitPrice, i)
       finalBal = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
       closedRemaining = remaining.map(t => ({
-        ...t, status: 'closed' as const, exit_price: cur.close,
-        pnl: calcPnl(t.side, t.entry_price, cur.close, t.quantity, cs),
-        closed_at_idx: i,
+        ...t, status: 'closed' as const, exit_price: exitPrice,
+        pnl: calcPnl(t.side, t.entry_price, exitPrice, t.quantity, cs), closed_at_idx: i,
       }))
     }
 
     setTrades(prev => prev.map(t => {
-      if (t.id === tradeId) return { ...t, status: 'closed' as const, exit_price: cur.close, pnl, closed_at_idx: i }
-      const override = closedRemaining.find(r => r.id === t.id)
-      return override ?? t
+      if (t.id === tradeId) return { ...t, status: 'closed' as const, exit_price: exitPrice, pnl, closed_at_idx: i }
+      return closedRemaining.find(r => r.id === t.id) ?? t
     }))
     setBalance(finalBal)
     if (breached) setAccountBreached(true)
@@ -374,14 +346,18 @@ export default function WorkspacePage() {
     )
   }
 
-  const sym      = symRef.current
-  const cur      = candles[idx - 1]
-  const m1Total   = originalCandlesRef.current.length
-  const m1Playable = m1Total - playableStartIdxRef.current
-  const progress   = m1Playable > 0
-    ? Math.round(Math.max(0, m1AbsIdxRef.current - playableStartIdxRef.current) / m1Playable * 100)
-    : 0
-  const done     = m1AbsIdxRef.current >= originalCandlesRef.current.length - 1
+  const sym     = symRef.current
+  const m1All   = originalCandlesRef.current
+  // ── All price/time derived from m1AbsIdx (state) — NEVER from aggregated candle ──
+  const m1Candle  = m1All[m1AbsIdx]
+  const m1Price   = m1Candle?.close  ?? 0
+  const m1Time    = m1Candle?.time   ?? 0
+  const m1High    = m1Candle?.high   ?? 0
+  const m1Low     = m1Candle?.low    ?? 0
+  const m1Open    = m1Candle?.open   ?? 0
+
+  const cur      = candles[idx - 1]    // aggregated candle — only used for chart
+  const done     = m1AbsIdx >= m1All.length - 1
   const openTr   = trades.filter(t => t.status === 'open')
   const closedTr = trades.filter(t => t.status === 'closed')
   const openPnl  = m1Price
@@ -389,53 +365,35 @@ export default function WorkspacePage() {
     : 0
   const equity   = parseFloat((balance + openPnl).toFixed(2))
 
-  // Fix 2: always format using simTimestampRef — never changes on TF switch
-  const formatSimTime = (tzValue: string) => {
-    const ts     = simTimestampRef.current
+  const m1Total    = m1All.length
+  const m1Playable = m1Total - playableStartIdxRef.current
+  const progress   = m1Playable > 0
+    ? Math.round(Math.max(0, m1AbsIdx - playableStartIdxRef.current) / m1Playable * 100)
+    : 0
+
+  const formatTime = (ts: number, tzValue: string) => {
     if (!ts) return '—'
-    const tzInfo = TIMEZONES.find(tz => tz.value === tzValue)
-    const offset = tzInfo?.offset ?? 0
-    const d      = new Date(ts * 1000 + offset * 3600 * 1000)
-    return d.toLocaleString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
+    const off = TIMEZONES.find(z => z.value === tzValue)?.offset ?? 0
+    const d   = new Date(ts * 1000 + off * 3600 * 1000)
+    return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
   }
 
-  const dateStr  = formatSimTime(timezone)
+  const dateStr = formatTime(m1Time, timezone)
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-primary)'}}>
 
-      {/* Account Breached Modal */}
       {accountBreached && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0,0,0,0.75)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{
-            background: 'var(--bg-secondary)', border: '2px solid #ef4444',
-            borderRadius: 16, padding: '2.5rem 2rem', maxWidth: 380,
-            textAlign: 'center', boxShadow: '0 8px 40px rgba(239,68,68,0.3)',
-          }}>
-            <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 16 }}>💥</div>
-            <h2 style={{ color: '#ef4444', fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>
-              Account Breached
-            </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24, lineHeight: 1.6 }}>
+        <div style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'var(--bg-secondary)', border:'2px solid #ef4444', borderRadius:16, padding:'2.5rem 2rem', maxWidth:380, textAlign:'center', boxShadow:'0 8px 40px rgba(239,68,68,0.3)' }}>
+            <div style={{ fontSize:52, lineHeight:1, marginBottom:16 }}>💥</div>
+            <h2 style={{ color:'#ef4444', fontSize:22, fontWeight:700, margin:'0 0 8px' }}>Account Breached</h2>
+            <p style={{ color:'var(--text-muted)', fontSize:14, marginBottom:24, lineHeight:1.6 }}>
               Your equity reached $0.<br/>All positions have been closed.
             </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={() => router.push('/dashboard/sessions')} style={{
-                background: '#ef4444', color: '#fff', border: 'none',
-                borderRadius: 8, padding: '10px 20px', fontWeight: 700, cursor: 'pointer', fontSize: 14,
-              }}>Back to Sessions</button>
-              <button onClick={() => setAccountBreached(false)} style={{
-                background: 'transparent', color: 'var(--text-muted)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 8, padding: '10px 20px', fontWeight: 600, cursor: 'pointer', fontSize: 14,
-              }}>Dismiss</button>
+            <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+              <button onClick={() => router.push('/dashboard/sessions')} style={{ background:'#ef4444', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontWeight:700, cursor:'pointer', fontSize:14 }}>Back to Sessions</button>
+              <button onClick={() => setAccountBreached(false)} style={{ background:'transparent', color:'var(--text-muted)', border:'1px solid var(--border-default)', borderRadius:8, padding:'10px 20px', fontWeight:600, cursor:'pointer', fontSize:14 }}>Dismiss</button>
             </div>
           </div>
         </div>
@@ -446,20 +404,19 @@ export default function WorkspacePage() {
         style={{borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
         <button onClick={() => router.push('/dashboard/sessions')}
           className="text-sm rounded-lg px-3 py-1.5 transition-all shrink-0"
-          style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>
-          ← Back
-        </button>
+          style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>← Back</button>
         <Badge variant="blue">{session.symbol}</Badge>
         <span className="text-xs truncate max-w-[180px]" style={{color:'var(--text-muted)'}}>{session.name}</span>
 
-        {cur && (
+        {/* OHLC — all from M1 candle, never from aggregated */}
+        {m1Candle && (
           <div className="flex gap-3 ml-1">
-            {([['O',cur.open],['H',cur.high],['L',cur.low],['C', m1Price || cur.close]] as [string,number][]).map(([lb,v]) => (
+            {([['O', m1Open],['H', m1High],['L', m1Low],['C', m1Price]] as [string,number][]).map(([lb,v]) => (
               <div key={lb} className="flex gap-1 items-baseline">
                 <span className="text-[9px] uppercase leading-none" style={{color:'var(--text-muted)'}}>{lb}</span>
                 <span className="font-mono text-[11px]" style={{color:
                   lb==='H' ? 'var(--green)' : lb==='L' ? 'var(--red)' :
-                  lb==='C' ? ((m1Price || cur.close) >= cur.open ? 'var(--green)' : 'var(--red)') : 'var(--text-primary)'}}>
+                  lb==='C' ? (m1Price >= m1Open ? 'var(--green)' : 'var(--red)') : 'var(--text-primary)'}}>
                   {fmtPrice(v, sym.decimals)}
                 </span>
               </div>
@@ -493,10 +450,10 @@ export default function WorkspacePage() {
       </div>
 
       {/* Main */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+      <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, minHeight:0 }}>
 
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+          <div style={{ flex:1, minHeight:0, overflow:'hidden', position:'relative' }}>
             <WorkspaceChart
               candles={candles.slice(0, idx)}
               openTrades={openTr}
@@ -526,9 +483,7 @@ export default function WorkspacePage() {
               <span className="text-xs" style={{color:'var(--text-muted)'}}>{t('candles')}</span>
               <button onClick={() => advance(skipVal)} disabled={done || accountBreached}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{border:'1px solid var(--border-default)', color:'var(--text-secondary)'}}>
-                →
-              </button>
+                style={{border:'1px solid var(--border-default)', color:'var(--text-secondary)'}}>→</button>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs" style={{color:'var(--text-muted)'}}>Timeframe</span>
@@ -545,13 +500,11 @@ export default function WorkspacePage() {
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
-              <div className="h-1 rounded-full overflow-hidden" style={{background:'var(--border-subtle)', minWidth: 80}}>
-                <div className="h-full rounded-full transition-all duration-300"
-                  style={{width:`${progress}%`, background:'var(--accent)'}}/>
+              <div className="h-1 rounded-full overflow-hidden" style={{background:'var(--border-subtle)', minWidth:80}}>
+                <div className="h-full rounded-full transition-all duration-300" style={{width:`${progress}%`, background:'var(--accent)'}}/>
               </div>
-              {/* Fix 2: time from simTimestampRef — never changes on TF switch */}
               <span className="font-mono text-[10px] whitespace-nowrap" style={{color:'var(--text-muted)'}}>
-                {formatSimTime(timezone)}
+                {formatTime(m1Time, timezone)}
               </span>
               <select value={timezone} onChange={e=>setTimezone(e.target.value)}
                 className="rounded-lg px-2 py-1 text-xs outline-none cursor-pointer"
@@ -564,10 +517,7 @@ export default function WorkspacePage() {
           {/* Trades table */}
           <div className="h-48 flex flex-col shrink-0" style={{borderTop:'1px solid var(--border-subtle)'}}>
             <TabBar
-              tabs={[
-                {key:'open',   label:`${t('openPositions')} (${openTr.length})`},
-                {key:'closed', label:`${t('closedTrades')} (${closedTr.length})`},
-              ]}
+              tabs={[{key:'open', label:`${t('openPositions')} (${openTr.length})`}, {key:'closed', label:`${t('closedTrades')} (${closedTr.length})`}]}
               active={tradeTab} onChange={setTradeTab}
             />
             <div className="flex-1 overflow-y-auto text-xs">
@@ -644,11 +594,11 @@ export default function WorkspacePage() {
             <div className="flex gap-4 mt-2.5">
               <div>
                 <p className="text-[9px] uppercase" style={{color:'var(--text-muted)'}}>High</p>
-                <p className="font-mono text-xs" style={{color:'var(--green)'}}>{cur ? fmtPrice(cur.high, sym.decimals) : '—'}</p>
+                <p className="font-mono text-xs" style={{color:'var(--green)'}}>{m1High ? fmtPrice(m1High, sym.decimals) : '—'}</p>
               </div>
               <div>
                 <p className="text-[9px] uppercase" style={{color:'var(--text-muted)'}}>Low</p>
-                <p className="font-mono text-xs" style={{color:'var(--red)'}}>{cur ? fmtPrice(cur.low, sym.decimals) : '—'}</p>
+                <p className="font-mono text-xs" style={{color:'var(--red)'}}>{m1Low ? fmtPrice(m1Low, sym.decimals) : '—'}</p>
               </div>
             </div>
           </div>
@@ -689,14 +639,10 @@ export default function WorkspacePage() {
             <div className="flex flex-col gap-2 pt-1">
               <button onClick={() => execTrade('buy')} disabled={accountBreached}
                 className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{background:'var(--green)'}}>
-                {t('buy')}
-              </button>
+                style={{background:'var(--green)'}}>{t('buy')}</button>
               <button onClick={() => execTrade('sell')} disabled={accountBreached}
                 className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{background:'var(--red)'}}>
-                {t('sell')}
-              </button>
+                style={{background:'var(--red)'}}>{t('sell')}</button>
             </div>
           </div>
 
