@@ -45,8 +45,8 @@ export default function WorkspacePage() {
   const supabase = createClient()
 
   const [session,         setSession]         = useState<Session | null>(null)
-  const [candles,         setCandles]         = useState<Candle[]>([])
-  const [idx,             setIdx]             = useState(0)
+  // m1Loaded triggers recompute of aggregatedCandles when data arrives
+  const [m1Loaded,        setM1Loaded]        = useState(false)
   const [trades,          setTrades]          = useState<Trade[]>([])
   const [balance,         setBalance]         = useState(0)
   const [skipVal,         setSkipVal]         = useState(5)
@@ -68,50 +68,33 @@ export default function WorkspacePage() {
 
   const originalCandlesRef  = useRef<Candle[]>([])
   const playableStartIdxRef = useRef<number>(0)
-  const stateRef            = useRef({ candles, idx, trades, balance, m1AbsIdx })
+  const stateRef            = useRef({ trades, balance, m1AbsIdx })
   const symRef              = useRef<Symbol>(getSymbol('XAUUSD'))
 
   useEffect(() => {
-    stateRef.current = { candles, idx, trades, balance, m1AbsIdx }
-  }, [candles, idx, trades, balance, m1AbsIdx])
+    stateRef.current = { trades, balance, m1AbsIdx }
+  }, [trades, balance, m1AbsIdx])
 
   useEffect(() => { if (user && id) init() }, [user, id])
 
-  // Keep a ref to current timeframe so effects can read it without stale closure
-  const timeframeRef = useRef<TimeFrame>(timeframe)
-  useEffect(() => { timeframeRef.current = timeframe }, [timeframe])
+  // Aggregated candles — recomputed only when timeframe or data changes (NOT on every advance)
+  const aggregatedCandles = useMemo(() => {
+    if (!m1Loaded || !originalCandlesRef.current.length) return []
+    return aggregateCandles(originalCandlesRef.current, timeframe)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeframe, m1Loaded])
 
-  // Re-aggregate helper — used by both TF switch and tab-restore
-  const applyTimeframe = useCallback((tf: TimeFrame) => {
-    const m1All = originalCandlesRef.current
-    if (!m1All.length) return
-    const curM1Ts    = m1All[stateRef.current.m1AbsIdx]?.time ?? 0
-    const aggregated = aggregateCandles(m1All, tf)
-    setCandles(aggregated)
+  // Display idx — O(n) scan, but only over aggregated array
+  const displayIdx = useMemo(() => {
+    if (!aggregatedCandles.length) return 0
+    const curM1Ts = originalCandlesRef.current[m1AbsIdx]?.time ?? 0
     let newIdx = Math.max(1, playableStartIdxRef.current)
-    for (let i = 0; i < aggregated.length; i++) {
-      if (aggregated[i].time <= curM1Ts) newIdx = i + 1
+    for (let i = 0; i < aggregatedCandles.length; i++) {
+      if (aggregatedCandles[i].time <= curM1Ts) newIdx = i + 1
       else break
     }
-    setIdx(Math.min(newIdx, aggregated.length))
-  }, [])
-
-  // Timeframe switch
-  useEffect(() => {
-    applyTimeframe(timeframe)
-  }, [timeframe, applyTimeframe])
-
-  // Bug 1: tab restore — when page becomes visible again, re-apply current TF
-  // (chart unmount/remount resets candles to M1 raw data)
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && originalCandlesRef.current.length) {
-        applyTimeframe(timeframeRef.current)
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [applyTimeframe])
+    return Math.min(newIdx, aggregatedCandles.length)
+  }, [aggregatedCandles, m1AbsIdx])
 
   async function init() {
     const { data: sess } = await supabase.from('sessions').select('*').eq('id', id).single()
@@ -157,8 +140,7 @@ export default function WorkspacePage() {
     }
 
     setM1AbsIdx(savedM1Abs)
-    setCandles(allUpToEnd)
-    setIdx(savedM1Abs + 1)
+    setM1Loaded(true)  // triggers aggregatedCandles recompute
 
     const { data: openTrades } = await supabase
       .from('trades').select('*').eq('session_id', id).eq('status', 'open')
@@ -181,9 +163,16 @@ export default function WorkspacePage() {
     return delta
   }, [supabase])
 
+  const advanceCandlesRef = useRef<Candle[]>([])
+  const advanceIdxRef     = useRef<number>(0)
+  useEffect(() => { advanceCandlesRef.current = aggregatedCandles }, [aggregatedCandles])
+  useEffect(() => { advanceIdxRef.current = displayIdx }, [displayIdx])
+
   const advance = useCallback(async (steps: number) => {
     if (accountBreached) return
-    const { candles: c, idx: i, trades: tr, balance: bal, m1AbsIdx: curM1Abs } = stateRef.current
+    const c   = advanceCandlesRef.current
+    const i   = advanceIdxRef.current
+    const { trades: tr, balance: bal, m1AbsIdx: curM1Abs } = stateRef.current
     if (!c.length) return
     const m1All = originalCandlesRef.current
     const cs    = symRef.current.contractSize
@@ -243,7 +232,6 @@ export default function WorkspacePage() {
 
     setBalance(finalBal)
     setTrades(finalTrades)
-    setIdx(end)
     setM1AbsIdx(newM1Abs)   // ← single state update drives price + time
     if (breached) setAccountBreached(true)
 
@@ -256,7 +244,8 @@ export default function WorkspacePage() {
 
   async function execTrade(side: 'buy' | 'sell') {
     if (accountBreached) return
-    const { candles: c, idx: i } = stateRef.current
+    const c = advanceCandlesRef.current
+    const i = advanceIdxRef.current
     const cur = c[i - 1]
     if (!cur || !session) return
     // Use real M1 price as entry
@@ -293,8 +282,10 @@ export default function WorkspacePage() {
   }
 
   async function closeTrade(tradeId: string) {
-    const { candles: c, idx: i, balance: bal } = stateRef.current
-    const cur   = c[i - 1]
+    const c   = advanceCandlesRef.current
+    const i   = advanceIdxRef.current
+    const bal = stateRef.current.balance
+    const cur = c[i - 1]
     const trade = stateRef.current.trades.find(t => t.id === tradeId)
     if (!cur || !trade) return
     const cs       = symRef.current.contractSize
@@ -368,7 +359,6 @@ export default function WorkspacePage() {
 
   const sym     = symRef.current
   const m1All   = originalCandlesRef.current
-  // ── All price/time derived from m1AbsIdx (state) — NEVER from aggregated candle ──
   const m1Candle  = m1All[m1AbsIdx]
   const m1Price   = m1Candle?.close  ?? 0
   const m1Time    = m1Candle?.time   ?? 0
@@ -376,7 +366,6 @@ export default function WorkspacePage() {
   const m1Low     = m1Candle?.low    ?? 0
   const m1Open    = m1Candle?.open   ?? 0
 
-  const cur      = candles[idx - 1]    // aggregated candle — only used for chart
   const done     = m1AbsIdx >= m1All.length - 1
   const openTr   = trades.filter(t => t.status === 'open')
   const closedTr = trades.filter(t => t.status === 'closed')
@@ -503,7 +492,7 @@ export default function WorkspacePage() {
               ))}
             </div>
             <WorkspaceChart
-              candles={candles.slice(0, idx)}
+              candles={aggregatedCandles.slice(0, displayIdx)}
               openTrades={openTr}
               symbol={sym}
               lastPrice={m1Price || undefined}

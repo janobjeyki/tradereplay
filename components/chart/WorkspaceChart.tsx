@@ -587,7 +587,10 @@ function LineWidget({ top, children }: { top: number; children: React.ReactNode 
 
 function TvPillBtn({ label, onClick }: { label: string; onClick?: () => void }) {
   return (
-    <button onClick={onClick} style={{
+    <button
+      onClick={onClick}
+      onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
+      style={{
       background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 2,
       color: '#fff', fontSize: 10, fontWeight: 700,
       padding: '2px 5px', cursor: 'pointer', lineHeight: '14px',
@@ -599,7 +602,10 @@ function TvPillBtn({ label, onClick }: { label: string; onClick?: () => void }) 
 
 function TvCloseBtn({ onClick }: { onClick?: () => void }) {
   return (
-    <button onClick={onClick} style={{
+    <button
+      onClick={onClick}
+      onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
+      style={{
       background: 'rgba(0,0,0,0.22)', border: 'none', borderRadius: 2,
       color: 'rgba(255,255,255,0.9)', fontSize: 15, fontWeight: 300,
       width: 18, height: 18,
