@@ -15,6 +15,7 @@ interface Props {
   candles:       Candle[]
   openTrades:    Trade[]
   symbol:        Symbol
+  lastPrice?:    number   // real M1 price — stable across TF switches
   onSetSL?:      (tradeId: string, price: number) => void
   onSetTP?:      (tradeId: string, price: number) => void
   onCloseTrade?: (tradeId: string) => void
@@ -28,7 +29,7 @@ const TV_SL         = '#ef4444'   // red (matches SL widget + price line)
 
 type DragType = 'sl' | 'tp' | 'entry'
 
-export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, onCloseTrade }: Props) {
+export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade }: Props) {
   const containerRef    = useRef<HTMLDivElement>(null)
   const chartRef        = useRef<any>(null)
   const seriesRef       = useRef<any>(null)
@@ -416,7 +417,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, onSetSL, onSetTP, 
     return () => el.removeEventListener('mousemove', onMove)
   }, [openTrades])
 
-  const lastPrice = candles.length > 0 ? candles[candles.length - 1].close : 0
+  // Use prop if provided (stable M1 price), fallback to last candle close
+  const lastPrice = lastPriceProp ?? (candles.length > 0 ? candles[candles.length - 1].close : 0)
 
   return (
     <div style={{ width: '100%', height: '100%', minHeight: 0, position: 'relative' }}>

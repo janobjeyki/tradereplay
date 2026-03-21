@@ -69,16 +69,17 @@ export default function WorkspacePage() {
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
 
-  // Fix 2: single source of truth for simulation time (unix seconds of last M1 candle)
-  // This never changes when switching timeframes — only advances when candles are skipped.
+  // simTimestampRef: unix seconds of last M1 candle — single source of truth for time
   const simTimestampRef     = useRef<number>(0)
+  // m1AbsIdxRef: absolute index into originalCandlesRef of last M1 candle (for DB save/reload)
+  const m1AbsIdxRef         = useRef<number>(0)
 
   const originalCandlesRef  = useRef<Candle[]>([])
   const playableStartIdxRef = useRef<number>(0)
   const stateRef            = useRef({ candles, idx, trades, balance })
   const symRef              = useRef<Symbol>(getSymbol('XAUUSD'))
-  // Fix 1: always holds the real M1 close price — never changes on TF switch
-  const m1PriceRef          = useRef<number>(0)
+  // m1Price state: triggers re-render on price change, stable across TF switches
+  const [m1Price, setM1Price] = useState<number>(0)
 
   useEffect(() => { stateRef.current = { candles, idx, trades, balance } }, [candles, idx, trades, balance])
   useEffect(() => { if (user && id) init() }, [user, id])
@@ -137,15 +138,28 @@ export default function WorkspacePage() {
     originalCandlesRef.current  = allUpToEnd
     playableStartIdxRef.current = playableStart
 
-    const savedProgress = s.candle_index > 0 ? s.candle_index : 0
-    const startIdx      = Math.min(playableStart + savedProgress, allUpToEnd.length)
+    // startIdx unused — computed below via savedM1AbsIdx
 
-    // Fix 2: initialise simTimestamp from the actual M1 candle at startIdx
-    simTimestampRef.current = allUpToEnd[startIdx - 1]?.time ?? startTs
-    m1PriceRef.current = allUpToEnd[startIdx - 1]?.close ?? 0
+    // Restore from saved absolute M1 index (candle_index now stores absolute M1 idx)
+    // Legacy: if candle_index < playableStart it was old relative format, treat as 0 progress
+    let savedM1AbsIdx = 0
+    if (s.candle_index > playableStart) {
+      // New format: absolute M1 index
+      savedM1AbsIdx = Math.min(s.candle_index, allUpToEnd.length - 1)
+    } else if (s.candle_index > 0) {
+      // Old format: relative candle count — convert to absolute
+      savedM1AbsIdx = Math.min(playableStart + s.candle_index, allUpToEnd.length - 1)
+    } else {
+      savedM1AbsIdx = playableStart
+    }
+
+    const m1AtStart = allUpToEnd[savedM1AbsIdx]
+    simTimestampRef.current = m1AtStart?.time ?? startTs
+    m1AbsIdxRef.current     = savedM1AbsIdx
+    setM1Price(m1AtStart?.close ?? 0)
 
     setCandles(allUpToEnd)
-    setIdx(startIdx)
+    setIdx(savedM1AbsIdx + 1)
 
     const { data: openTrades } = await supabase
       .from('trades').select('*').eq('session_id', id).eq('status', 'open')
@@ -201,11 +215,17 @@ export default function WorkspacePage() {
       }).eq('id', trade.id)
     }
 
-    // Fix 2: advance simTimestamp by steps × seconds-per-TF
+    // Advance simulation timestamp
     simTimestampRef.current += steps * TF_SECONDS[timeframe as TimeFrame]
-    // Fix 1: update m1Price from actual M1 candle nearest to simTimestamp
-    const m1Nearest = originalCandlesRef.current.findLast(c => c.time <= simTimestampRef.current)
-    if (m1Nearest) m1PriceRef.current = m1Nearest.close
+    // Find absolute M1 candle index at new simTimestamp
+    const m1All = originalCandlesRef.current
+    let newM1AbsIdx = m1AbsIdxRef.current
+    for (let i = m1All.length - 1; i >= 0; i--) {
+      if (m1All[i].time <= simTimestampRef.current) { newM1AbsIdx = i; break }
+    }
+    m1AbsIdxRef.current = newM1AbsIdx
+    const newM1Price = m1All[newM1AbsIdx]?.close ?? 0
+    setM1Price(newM1Price)
 
     const newBal   = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
     const lastCandle = c[end - 1]
@@ -236,10 +256,8 @@ export default function WorkspacePage() {
     setIdx(end)
     if (breached) setAccountBreached(true)
 
-    const playable = c.length - playableStartIdxRef.current
-    const progress = Math.max(0, end - playableStartIdxRef.current)
     await supabase.from('sessions').update({
-      candle_index: progress,
+      candle_index: newM1AbsIdx,  // absolute M1 index for reload
       end_capital:  finalBal,
       is_completed: end >= c.length || breached,
     }).eq('id', id)
@@ -358,13 +376,14 @@ export default function WorkspacePage() {
 
   const sym      = symRef.current
   const cur      = candles[idx - 1]
-  const playable = candles.length - playableStartIdxRef.current
-  const progress = playable > 0 ? Math.round(Math.max(0, idx - playableStartIdxRef.current) / playable * 100) : 0
-  const done     = idx >= candles.length
+  const m1Total   = originalCandlesRef.current.length
+  const m1Playable = m1Total - playableStartIdxRef.current
+  const progress   = m1Playable > 0
+    ? Math.round(Math.max(0, m1AbsIdxRef.current - playableStartIdxRef.current) / m1Playable * 100)
+    : 0
+  const done     = m1AbsIdxRef.current >= originalCandlesRef.current.length - 1
   const openTr   = trades.filter(t => t.status === 'open')
   const closedTr = trades.filter(t => t.status === 'closed')
-  // Fix 1: use m1PriceRef so TF switch never changes displayed price or PnL
-  const m1Price  = m1PriceRef.current || cur?.close || 0
   const openPnl  = m1Price
     ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize), 0)
     : 0
@@ -482,6 +501,7 @@ export default function WorkspacePage() {
               candles={candles.slice(0, idx)}
               openTrades={openTr}
               symbol={sym}
+              lastPrice={m1Price || undefined}
               onSetSL={handleSetSL}
               onSetTP={handleSetTP}
               onCloseTrade={closeTrade}
