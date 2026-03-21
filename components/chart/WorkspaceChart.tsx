@@ -37,7 +37,7 @@ const TV_SL         = '#ef4444'   // red (matches SL widget + price line)
 type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
-  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade
+  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade, indicatorConfig },
   ref
 ) {
   const containerRef    = useRef<HTMLDivElement>(null)
