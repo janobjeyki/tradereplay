@@ -30,6 +30,19 @@ const TIMEZONES = [
   { value: 'AEDT', label: 'AEDT (Sydney)',offset: 11 },
 ]
 
+// Seconds per candle for each timeframe
+const TF_SECONDS: Record<TimeFrame, number> = {
+  m1:  60,
+  m5:  300,
+  m15: 900,
+  m30: 1800,
+  h1:  3600,
+  h4:  14400,
+  d1:  86400,
+  w1:  604800,
+  M1:  2592000,
+}
+
 export default function WorkspacePage() {
   const params   = useParams()
   const id       = params.id as string
@@ -56,38 +69,32 @@ export default function WorkspacePage() {
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
 
-  // originalCandlesRef: ALL m1 candles from year-start → session end_date
-  const originalCandlesRef  = useRef<Candle[]>([])
-  // playableStartIdxRef: index into originalCandlesRef where session start_date begins
-  const playableStartIdxRef = useRef<number>(0)
+  // Fix 2: single source of truth for simulation time (unix seconds of last M1 candle)
+  // This never changes when switching timeframes — only advances when candles are skipped.
+  const simTimestampRef     = useRef<number>(0)
 
-  const stateRef = useRef({ candles, idx, trades, balance })
-  const symRef   = useRef<Symbol>(getSymbol('XAUUSD'))
+  const originalCandlesRef  = useRef<Candle[]>([])
+  const playableStartIdxRef = useRef<number>(0)
+  const stateRef            = useRef({ candles, idx, trades, balance })
+  const symRef              = useRef<Symbol>(getSymbol('XAUUSD'))
 
   useEffect(() => { stateRef.current = { candles, idx, trades, balance } }, [candles, idx, trades, balance])
   useEffect(() => { if (user && id) init() }, [user, id])
 
-  // ── Fix 2: Timeframe change — preserve timestamp using last candle <= currentTs ──
+  // Fix 2: timeframe switch — re-aggregate and find idx using simTimestampRef (never drifts)
   useEffect(() => {
     if (!originalCandlesRef.current.length) return
-
-    // Capture the *current* visible timestamp BEFORE re-aggregating
-    const currentTs = stateRef.current.candles[stateRef.current.idx - 1]?.time ?? null
+    const simTs      = simTimestampRef.current
     const aggregated = aggregateCandles(originalCandlesRef.current, timeframe)
     setCandles(aggregated)
 
-    if (currentTs != null) {
-      // Find the last aggregated candle whose open time <= currentTs
-      // (opposite of >= which caused jumping forward on higher TFs)
-      let newIdx = playableStartIdxRef.current > 0
-        ? Math.max(1, playableStartIdxRef.current)
-        : 1
-      for (let i = 0; i < aggregated.length; i++) {
-        if (aggregated[i].time <= currentTs) newIdx = i + 1
-        else break
-      }
-      setIdx(Math.min(newIdx, aggregated.length))
+    // Find the last aggregated candle whose open time <= simTs
+    let newIdx = playableStartIdxRef.current > 0 ? playableStartIdxRef.current : 1
+    for (let i = 0; i < aggregated.length; i++) {
+      if (aggregated[i].time <= simTs) newIdx = i + 1
+      else break
     }
+    setIdx(Math.min(newIdx, aggregated.length))
   }, [timeframe])
 
   async function init() {
@@ -112,11 +119,8 @@ export default function WorkspacePage() {
       return
     }
 
-    const startTs = Math.floor(new Date(s.start_date).getTime() / 1000)
-    const endTs   = Math.floor(new Date(s.end_date).getTime()   / 1000) + 86400
-
-    // Fix 1: include ALL candles from the very first available candle up to end_date
-    // so the chart shows full history context before start_date
+    const startTs   = Math.floor(new Date(s.start_date).getTime() / 1000)
+    const endTs     = Math.floor(new Date(s.end_date).getTime()   / 1000) + 86400
     const allUpToEnd = m1.filter(c => c.time <= endTs)
 
     if (!allUpToEnd.length) {
@@ -125,19 +129,20 @@ export default function WorkspacePage() {
       return
     }
 
-    // Find where the playable session starts (first candle >= start_date)
     let playableStart = allUpToEnd.findIndex(c => c.time >= startTs)
     if (playableStart < 0) playableStart = allUpToEnd.length
 
     originalCandlesRef.current  = allUpToEnd
     playableStartIdxRef.current = playableStart
 
-    setCandles(allUpToEnd)
-
-    // Initial idx = playableStart (shows all history up to start_date, nothing playable yet)
-    // If session was already in progress (candle_index > 0), offset by playableStart
     const savedProgress = s.candle_index > 0 ? s.candle_index : 0
-    setIdx(Math.min(playableStart + savedProgress, allUpToEnd.length))
+    const startIdx      = Math.min(playableStart + savedProgress, allUpToEnd.length)
+
+    // Fix 2: initialise simTimestamp from the actual M1 candle at startIdx
+    simTimestampRef.current = allUpToEnd[startIdx - 1]?.time ?? startTs
+
+    setCandles(allUpToEnd)
+    setIdx(startIdx)
 
     const { data: openTrades } = await supabase
       .from('trades').select('*').eq('session_id', id).eq('status', 'open')
@@ -145,7 +150,24 @@ export default function WorkspacePage() {
     setLoading(false)
   }
 
-  // ── Advance candles + Fix 4: breach on equity ≤ 0 ───────────────
+  // Fix 1 helper: close all open trades at a given price, return total PnL delta
+  const closeAllOpenTrades = useCallback(async (
+    openTrades: Trade[],
+    exitPrice: number,
+    atIdx: number,
+  ): Promise<number> => {
+    const cs = symRef.current.contractSize
+    let delta = 0
+    for (const trade of openTrades) {
+      const pnl = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
+      delta += pnl
+      await supabase.from('trades').update({
+        status: 'closed', exit_price: exitPrice, pnl, closed_at_idx: atIdx,
+      }).eq('id', trade.id)
+    }
+    return delta
+  }, [supabase])
+
   const advance = useCallback(async (steps: number) => {
     if (accountBreached) return
     const { candles: c, idx: i, trades: tr, balance: bal } = stateRef.current
@@ -176,31 +198,46 @@ export default function WorkspacePage() {
       }).eq('id', trade.id)
     }
 
-    const newBal = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
+    // Fix 2: advance simTimestamp by steps × seconds-per-TF
+    simTimestampRef.current += steps * TF_SECONDS[timeframe as TimeFrame]
 
-    // Fix 4: compute equity = newBal + unrealized PnL of still-open trades at last candle
-    const lastCandle  = c[end - 1]
-    const stillOpen   = updatedTrades.filter(t => t.status === 'open')
-    const unrealised  = lastCandle
+    const newBal   = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
+    const lastCandle = c[end - 1]
+    const stillOpen  = updatedTrades.filter(t => t.status === 'open')
+    const unrealised = lastCandle
       ? stillOpen.reduce((a, t) => a + calcPnl(t.side, t.entry_price, lastCandle.close, t.quantity, cs), 0)
       : 0
-    const equity      = newBal + unrealised
-    const breached    = equity <= 0
+    const equity   = newBal + unrealised
+    const breached = equity <= 0
 
-    setBalance(newBal)
-    setTrades(updatedTrades)
+    // Fix 1: if account breached, close all remaining open trades at last price
+    let finalBal = newBal
+    let finalTrades = updatedTrades
+    if (breached && stillOpen.length > 0 && lastCandle) {
+      const closePnl = await closeAllOpenTrades(stillOpen, lastCandle.close, end)
+      finalBal = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
+      finalTrades = updatedTrades.map(t =>
+        t.status === 'open'
+          ? { ...t, status: 'closed' as const, exit_price: lastCandle.close,
+              pnl: calcPnl(t.side, t.entry_price, lastCandle.close, t.quantity, cs),
+              closed_at_idx: end }
+          : t
+      )
+    }
+
+    setBalance(finalBal)
+    setTrades(finalTrades)
     setIdx(end)
     if (breached) setAccountBreached(true)
 
-    // Progress is relative to the playable portion only
-    const playable    = c.length - playableStartIdxRef.current
-    const progress    = Math.max(0, end - playableStartIdxRef.current)
+    const playable = c.length - playableStartIdxRef.current
+    const progress = Math.max(0, end - playableStartIdxRef.current)
     await supabase.from('sessions').update({
       candle_index: progress,
-      end_capital:  newBal,
+      end_capital:  finalBal,
       is_completed: end >= c.length || breached,
     }).eq('id', id)
-  }, [id, supabase, accountBreached])
+  }, [id, supabase, accountBreached, timeframe, closeAllOpenTrades])
 
   async function execTrade(side: 'buy' | 'sell') {
     if (accountBreached) return
@@ -217,7 +254,6 @@ export default function WorkspacePage() {
       }
     }
     setSlError('')
-
     if (tpVal) {
       const tp = parseFloat(tpVal)
       if (!isNaN(tp)) {
@@ -248,7 +284,6 @@ export default function WorkspacePage() {
     const pnl    = calcPnl(trade.side, trade.entry_price, cur.close, trade.quantity, cs)
     const newBal = parseFloat(Math.max(0, bal + pnl).toFixed(2))
 
-    // Fix 4: after closing, check equity with remaining open trades
     const remaining  = stateRef.current.trades.filter(t => t.status === 'open' && t.id !== tradeId)
     const unrealised = remaining.reduce((a, t) => a + calcPnl(t.side, t.entry_price, cur.close, t.quantity, cs), 0)
     const breached   = newBal + unrealised <= 0
@@ -258,10 +293,25 @@ export default function WorkspacePage() {
     }).eq('id', tradeId)
     await supabase.from('sessions').update({ end_capital: newBal }).eq('id', id)
 
-    setTrades(prev => prev.map(t =>
-      t.id === tradeId ? { ...t, status: 'closed' as const, exit_price: cur.close, pnl, closed_at_idx: i } : t
-    ))
-    setBalance(newBal)
+    // Fix 1: if breached, close remaining open trades too
+    let finalBal = newBal
+    let closedRemaining: Trade[] = []
+    if (breached && remaining.length > 0) {
+      const closePnl = await closeAllOpenTrades(remaining, cur.close, i)
+      finalBal = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
+      closedRemaining = remaining.map(t => ({
+        ...t, status: 'closed' as const, exit_price: cur.close,
+        pnl: calcPnl(t.side, t.entry_price, cur.close, t.quantity, cs),
+        closed_at_idx: i,
+      }))
+    }
+
+    setTrades(prev => prev.map(t => {
+      if (t.id === tradeId) return { ...t, status: 'closed' as const, exit_price: cur.close, pnl, closed_at_idx: i }
+      const override = closedRemaining.find(r => r.id === t.id)
+      return override ?? t
+    }))
+    setBalance(finalBal)
     if (breached) setAccountBreached(true)
   }
 
@@ -303,37 +353,34 @@ export default function WorkspacePage() {
   const sym      = symRef.current
   const cur      = candles[idx - 1]
   const playable = candles.length - playableStartIdxRef.current
-  const progress = playable > 0
-    ? Math.round(Math.max(0, idx - playableStartIdxRef.current) / playable * 100)
-    : 0
+  const progress = playable > 0 ? Math.round(Math.max(0, idx - playableStartIdxRef.current) / playable * 100) : 0
   const done     = idx >= candles.length
   const openTr   = trades.filter(t => t.status === 'open')
   const closedTr = trades.filter(t => t.status === 'closed')
   const openPnl  = cur
     ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, cur.close, tr.quantity, sym.contractSize), 0)
     : 0
+  const equity   = parseFloat((balance + openPnl).toFixed(2))
 
-  // Fix 4: equity shown in top bar
-  const equity = parseFloat((balance + openPnl).toFixed(2))
-
-  const getFormattedDate = (timestamp: number, tzValue: string) => {
+  // Fix 2: always format using simTimestampRef — never changes on TF switch
+  const formatSimTime = (tzValue: string) => {
+    const ts     = simTimestampRef.current
+    if (!ts) return '—'
     const tzInfo = TIMEZONES.find(tz => tz.value === tzValue)
-    if (!tzInfo) return new Date(timestamp * 1000).toLocaleString('en-GB')
-    const tzDate = new Date(timestamp * 1000 + tzInfo.offset * 3600 * 1000)
-    return tzDate.toLocaleString('en-GB', {
+    const offset = tzInfo?.offset ?? 0
+    const d      = new Date(ts * 1000 + offset * 3600 * 1000)
+    return d.toLocaleString('en-GB', {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     })
   }
 
-  const dateStr = cur?.time
-    ? getFormattedDate(cur.time, timezone)
-    : interpolateDate(session.start_date, session.end_date, idx, candles.length)
+  const dateStr  = formatSimTime(timezone)
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-primary)'}}>
 
-      {/* Account Breached Modal — Fix 4 */}
+      {/* Account Breached Modal */}
       {accountBreached && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
@@ -341,37 +388,27 @@ export default function WorkspacePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-secondary)',
-            border: '2px solid #ef4444',
-            borderRadius: 16,
-            padding: '2.5rem 2rem',
-            maxWidth: 380,
-            textAlign: 'center',
-            boxShadow: '0 8px 40px rgba(239,68,68,0.3)',
+            background: 'var(--bg-secondary)', border: '2px solid #ef4444',
+            borderRadius: 16, padding: '2.5rem 2rem', maxWidth: 380,
+            textAlign: 'center', boxShadow: '0 8px 40px rgba(239,68,68,0.3)',
           }}>
             <div style={{ fontSize: 52, lineHeight: 1, marginBottom: 16 }}>💥</div>
             <h2 style={{ color: '#ef4444', fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>
               Account Breached
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 24, lineHeight: 1.6 }}>
-              Your equity has reached $0.<br />You have blown your account.
+              Your equity reached $0.<br/>All positions have been closed.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button onClick={() => router.push('/dashboard/sessions')} style={{
                 background: '#ef4444', color: '#fff', border: 'none',
-                borderRadius: 8, padding: '10px 20px', fontWeight: 700,
-                cursor: 'pointer', fontSize: 14,
-              }}>
-                Back to Sessions
-              </button>
+                borderRadius: 8, padding: '10px 20px', fontWeight: 700, cursor: 'pointer', fontSize: 14,
+              }}>Back to Sessions</button>
               <button onClick={() => setAccountBreached(false)} style={{
                 background: 'transparent', color: 'var(--text-muted)',
                 border: '1px solid var(--border-default)',
-                borderRadius: 8, padding: '10px 20px', fontWeight: 600,
-                cursor: 'pointer', fontSize: 14,
-              }}>
-                Dismiss
-              </button>
+                borderRadius: 8, padding: '10px 20px', fontWeight: 600, cursor: 'pointer', fontSize: 14,
+              }}>Dismiss</button>
             </div>
           </div>
         </div>
@@ -385,7 +422,6 @@ export default function WorkspacePage() {
           style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>
           ← Back
         </button>
-
         <Badge variant="blue">{session.symbol}</Badge>
         <span className="text-xs truncate max-w-[180px]" style={{color:'var(--text-muted)'}}>{session.name}</span>
 
@@ -395,10 +431,8 @@ export default function WorkspacePage() {
               <div key={lb} className="flex gap-1 items-baseline">
                 <span className="text-[9px] uppercase leading-none" style={{color:'var(--text-muted)'}}>{lb}</span>
                 <span className="font-mono text-[11px]" style={{color:
-                  lb==='H' ? 'var(--green)' :
-                  lb==='L' ? 'var(--red)'   :
-                  lb==='C' ? (cur.close>=cur.open?'var(--green)':'var(--red)') :
-                  'var(--text-primary)'}}>
+                  lb==='H' ? 'var(--green)' : lb==='L' ? 'var(--red)' :
+                  lb==='C' ? (cur.close>=cur.open?'var(--green)':'var(--red)') : 'var(--text-primary)'}}>
                   {fmtPrice(v, sym.decimals)}
                 </span>
               </div>
@@ -409,12 +443,10 @@ export default function WorkspacePage() {
         <span className="font-mono text-[10px]" style={{color:'var(--text-muted)'}}>{dateStr}</span>
 
         <div className="ml-auto flex items-center gap-4 shrink-0">
-          {/* Balance */}
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>{t('balance')}</p>
             <p className="font-mono font-bold text-base" style={{color:'var(--accent)'}}>{fmtMoney(balance)}</p>
           </div>
-          {/* Fix 4: Equity */}
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Equity</p>
             <p className="font-mono font-bold text-base" style={{color: equity >= balance ? 'var(--green)' : 'var(--red)'}}>
@@ -435,8 +467,6 @@ export default function WorkspacePage() {
 
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-
-        {/* Chart column */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
 
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
@@ -450,7 +480,7 @@ export default function WorkspacePage() {
             />
           </div>
 
-          {/* Candle controls */}
+          {/* Controls */}
           <div className="flex items-center gap-3 px-4 py-2.5 shrink-0 flex-wrap"
             style={{borderTop:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
             <button onClick={() => advance(1)} disabled={done || accountBreached}
@@ -480,27 +510,21 @@ export default function WorkspacePage() {
                 {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
               </select>
             </div>
-
             {done && !accountBreached && (
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{background:'var(--accent-muted)', color:'var(--accent)', border:'1px solid var(--accent-border)'}}>
                 {t('allCandlesRevealed')}
               </span>
             )}
-
-            {/* Progress + Fix 3: current time label + timezone */}
             <div className="ml-auto flex items-center gap-2">
-              <div className="flex-1 h-1 rounded-full overflow-hidden" style={{background:'var(--border-subtle)', minWidth: 80}}>
+              <div className="h-1 rounded-full overflow-hidden" style={{background:'var(--border-subtle)', minWidth: 80}}>
                 <div className="h-full rounded-full transition-all duration-300"
                   style={{width:`${progress}%`, background:'var(--accent)'}}/>
               </div>
-              {/* Fix 3: current candle time shown before timezone picker */}
-              {cur?.time && (
-                <span className="font-mono text-[10px] whitespace-nowrap"
-                  style={{color:'var(--text-muted)'}}>
-                  {getFormattedDate(cur.time, timezone)}
-                </span>
-              )}
+              {/* Fix 2: time from simTimestampRef — never changes on TF switch */}
+              <span className="font-mono text-[10px] whitespace-nowrap" style={{color:'var(--text-muted)'}}>
+                {formatSimTime(timezone)}
+              </span>
               <select value={timezone} onChange={e=>setTimezone(e.target.value)}
                 className="rounded-lg px-2 py-1 text-xs outline-none cursor-pointer"
                 style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}>
@@ -520,70 +544,62 @@ export default function WorkspacePage() {
             />
             <div className="flex-1 overflow-y-auto text-xs">
               {tradeTab === 'open' ? (
-                openTr.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noOpenTrades')}</div>
-                ) : (
-                  <table className="w-full">
-                    <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
-                      <tr>
-                        {['Side','Entry','SL','TP','Qty','Unreal. P&L',''].map((h,i) => (
+                openTr.length === 0
+                  ? <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noOpenTrades')}</div>
+                  : <table className="w-full">
+                      <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
+                        <tr>{['Side','Entry','SL','TP','Qty','Unreal. P&L',''].map((h,i)=>(
                           <th key={i} className="text-left px-3 py-1.5 font-normal text-[9px] uppercase tracking-widest" style={{color:'var(--text-muted)'}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {openTr.map(tr => {
-                        const upnl = cur ? calcPnl(tr.side, tr.entry_price, cur.close, tr.quantity, sym.contractSize) : 0
-                        return (
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {openTr.map(tr => {
+                          const upnl = cur ? calcPnl(tr.side, tr.entry_price, cur.close, tr.quantity, sym.contractSize) : 0
+                          return (
+                            <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
+                              <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
+                              <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
+                              <td className="px-3 py-2 font-mono" style={{color:'var(--text-muted)'}}>{tr.stop_loss   ? fmtPrice(tr.stop_loss,   sym.decimals) : '—'}</td>
+                              <td className="px-3 py-2 font-mono" style={{color:'var(--text-muted)'}}>{tr.take_profit ? fmtPrice(tr.take_profit, sym.decimals) : '—'}</td>
+                              <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
+                              <td className="px-3 py-2 font-mono font-semibold" style={{color: upnl>=0?'var(--green)':'var(--red)'}}>
+                                {upnl>=0?'+':''}{upnl.toFixed(2)}
+                              </td>
+                              <td className="px-3 py-2">
+                                <button onClick={() => closeTrade(tr.id)}
+                                  className="rounded px-2 py-0.5 text-[10px] transition-colors"
+                                  style={{color:'var(--red)', border:'1px solid var(--red-muted)'}}>
+                                  {t('close')}
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+              ) : (
+                closedTr.length === 0
+                  ? <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noClosedTrades')}</div>
+                  : <table className="w-full">
+                      <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
+                        <tr>{['Side','Entry','Exit','Qty','P&L'].map((h,i)=>(
+                          <th key={i} className="text-left px-3 py-1.5 font-normal text-[9px] uppercase tracking-widest" style={{color:'var(--text-muted)'}}>{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {closedTr.map(tr => (
                           <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
                             <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
                             <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
-                            <td className="px-3 py-2 font-mono" style={{color:'var(--text-muted)'}}>{tr.stop_loss   ? fmtPrice(tr.stop_loss,   sym.decimals) : '—'}</td>
-                            <td className="px-3 py-2 font-mono" style={{color:'var(--text-muted)'}}>{tr.take_profit ? fmtPrice(tr.take_profit, sym.decimals) : '—'}</td>
+                            <td className="px-3 py-2 font-mono">{tr.exit_price ? fmtPrice(tr.exit_price, sym.decimals) : '—'}</td>
                             <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
-                            <td className="px-3 py-2 font-mono font-semibold" style={{color: upnl>=0?'var(--green)':'var(--red)'}}>
-                              {upnl>=0?'+':''}{upnl.toFixed(2)}
-                            </td>
-                            <td className="px-3 py-2">
-                              <button onClick={() => closeTrade(tr.id)}
-                                className="rounded px-2 py-0.5 text-[10px] transition-colors"
-                                style={{color:'var(--red)', border:'1px solid var(--red-muted)'}}>
-                                {t('close')}
-                              </button>
+                            <td className="px-3 py-2 font-mono font-semibold" style={{color:(tr.pnl??0)>=0?'var(--green)':'var(--red)'}}>
+                              {(tr.pnl??0)>=0?'+':''}{(tr.pnl??0).toFixed(2)}
                             </td>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                )
-              ) : (
-                closedTr.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noClosedTrades')}</div>
-                ) : (
-                  <table className="w-full">
-                    <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
-                      <tr>
-                        {['Side','Entry','Exit','Qty','P&L'].map((h,i) => (
-                          <th key={i} className="text-left px-3 py-1.5 font-normal text-[9px] uppercase tracking-widest" style={{color:'var(--text-muted)'}}>{h}</th>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {closedTr.map(tr => (
-                        <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
-                          <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
-                          <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
-                          <td className="px-3 py-2 font-mono">{tr.exit_price ? fmtPrice(tr.exit_price, sym.decimals) : '—'}</td>
-                          <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
-                          <td className="px-3 py-2 font-mono font-semibold" style={{color:(tr.pnl??0)>=0?'var(--green)':'var(--red)'}}>
-                            {(tr.pnl??0)>=0?'+':''}{(tr.pnl??0).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )
+                      </tbody>
+                    </table>
               )}
             </div>
           </div>
@@ -592,8 +608,6 @@ export default function WorkspacePage() {
         {/* Right panel */}
         <div className="w-52 shrink-0 flex flex-col gap-3 overflow-y-auto p-3"
           style={{borderLeft:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
-
-          {/* Price card */}
           <div className="rounded-xl p-4" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
             <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('currentPrice')}</p>
             <p className="font-mono text-xl font-bold" style={{color:'var(--accent)'}}>
@@ -611,43 +625,38 @@ export default function WorkspacePage() {
             </div>
           </div>
 
-          {/* Trade panel */}
           <div className="rounded-xl p-4 flex flex-col gap-3" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
             <div>
               <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('quantity')}</p>
-              <input type="number" value={qty} step="0.01" min="0.01"
-                onChange={e=>setQty(e.target.value)}
+              <input type="number" value={qty} step="0.01" min="0.01" onChange={e=>setQty(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
                 style={{background:'var(--bg-primary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}
                 onFocus={e=>{e.currentTarget.style.borderColor='var(--accent)'}}
-                onBlur={e=>{e.currentTarget.style.borderColor='var(--border-default)'}}
-              />
+                onBlur={e=>{e.currentTarget.style.borderColor='var(--border-default)'}}/>
             </div>
             <div>
               <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>
-                {t('stopLoss')} <span style={{fontWeight:400, opacity:0.6}}>(optional)</span>
+                {t('stopLoss')} <span style={{fontWeight:400,opacity:0.6}}>(optional)</span>
               </p>
               <input type="number" value={slVal} step="0.1" placeholder="—"
-                onChange={e=>{ setSlVal(e.target.value); setSlError('') }}
+                onChange={e=>{setSlVal(e.target.value);setSlError('')}}
                 className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
-                style={{background:'var(--bg-primary)', border: slError?'1px solid var(--red)':'1px solid var(--border-default)', color:'var(--text-primary)'}}
+                style={{background:'var(--bg-primary)', border:slError?'1px solid var(--red)':'1px solid var(--border-default)', color:'var(--text-primary)'}}
                 onFocus={e=>{e.currentTarget.style.borderColor='var(--red)'}}
-                onBlur={e=>{e.currentTarget.style.borderColor=slError?'var(--red)':'var(--border-default)'}}
-              />
-              {slError && <p style={{color:'var(--red)', fontSize:10, marginTop:3}}>{slError}</p>}
+                onBlur={e=>{e.currentTarget.style.borderColor=slError?'var(--red)':'var(--border-default)'}}/>
+              {slError && <p style={{color:'var(--red)',fontSize:10,marginTop:3}}>{slError}</p>}
             </div>
             <div>
               <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>
-                {t('takeProfit')} <span style={{fontWeight:400, opacity:0.6}}>(optional)</span>
+                {t('takeProfit')} <span style={{fontWeight:400,opacity:0.6}}>(optional)</span>
               </p>
               <input type="number" value={tpVal} step="0.1" placeholder="—"
-                onChange={e=>{ setTpVal(e.target.value); setTpError('') }}
+                onChange={e=>{setTpVal(e.target.value);setTpError('')}}
                 className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
-                style={{background:'var(--bg-primary)', border: tpError?'1px solid var(--red)':'1px solid var(--border-default)', color:'var(--text-primary)'}}
+                style={{background:'var(--bg-primary)', border:tpError?'1px solid var(--red)':'1px solid var(--border-default)', color:'var(--text-primary)'}}
                 onFocus={e=>{e.currentTarget.style.borderColor='var(--green)'}}
-                onBlur={e=>{e.currentTarget.style.borderColor=tpError?'var(--red)':'var(--border-default)'}}
-              />
-              {tpError && <p style={{color:'var(--red)', fontSize:10, marginTop:3}}>{tpError}</p>}
+                onBlur={e=>{e.currentTarget.style.borderColor=tpError?'var(--red)':'var(--border-default)'}}/>
+              {tpError && <p style={{color:'var(--red)',fontSize:10,marginTop:3}}>{tpError}</p>}
             </div>
             <div className="flex flex-col gap-2 pt-1">
               <button onClick={() => execTrade('buy')} disabled={accountBreached}
