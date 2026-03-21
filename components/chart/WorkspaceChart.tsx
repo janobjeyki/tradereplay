@@ -422,8 +422,8 @@ export function WorkspaceChart({ candles, openTrades, symbol, lastPrice: lastPri
     const el = containerRef.current
     const onMove = (e: MouseEvent) => {
       if (draggingRef.current || !seriesRef.current) return
-      // Don't change cursor when hovering over overlay buttons
-      if ((e.target as HTMLElement).closest('button')) {
+      // If mouse is over the overlay widgets (not the chart canvas itself), show default
+      if (e.target !== el && !(e.target as HTMLElement).closest('canvas')) {
         setCursorStyle('default')
         return
       }
@@ -594,8 +594,8 @@ function LineWidget({ top, children }: { top: number; children: React.ReactNode 
 function TvPillBtn({ label, onClick }: { label: string; onClick?: () => void }) {
   return (
     <button
-      onClick={onClick}
-      onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
+      onClick={e => { e.stopPropagation(); onClick?.() }}
+      onMouseDown={e => e.stopPropagation()}
       style={{
       background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 2,
       color: '#fff', fontSize: 10, fontWeight: 700,
@@ -609,8 +609,8 @@ function TvPillBtn({ label, onClick }: { label: string; onClick?: () => void }) 
 function TvCloseBtn({ onClick }: { onClick?: () => void }) {
   return (
     <button
-      onClick={onClick}
-      onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
+      onClick={e => { e.stopPropagation(); onClick?.() }}
+      onMouseDown={e => e.stopPropagation()}
       style={{
       background: 'rgba(0,0,0,0.22)', border: 'none', borderRadius: 2,
       color: 'rgba(255,255,255,0.9)', fontSize: 15, fontWeight: 300,
