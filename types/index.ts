@@ -8,6 +8,15 @@ export interface Profile {
   updated_at: string
 }
 
+export interface Strategy {
+  id:          string
+  user_id:     string
+  name:        string
+  description: string | null
+  color:       string
+  created_at:  string
+}
+
 export interface Session {
   id: string
   user_id: string
@@ -19,6 +28,7 @@ export interface Session {
   end_capital: number
   candle_index: number
   is_completed: boolean
+  strategy_id:  string | null
   created_at: string
   updated_at: string
 }

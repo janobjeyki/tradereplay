@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLang } from '@/contexts/LangContext'
-import type { Session } from '@/types'
+import type { Session, Strategy } from '@/types'
 import { Button, Badge, Spinner, Modal, Input, Alert } from '@/components/ui'
 
 export default function SessionsPage() {
@@ -142,12 +142,21 @@ export default function SessionsPage() {
 function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCreate: (sessionId: string) => void }) {
   const { t }    = useLang()
   const { user } = useAuth()
-  const [name,   setName]   = useState('')
-  const [cap,    setCap]    = useState('10000')
-  const [sd,     setSd]     = useState('2025-01-01')
-  const [ed,     setEd]     = useState('2025-12-31')
-  const [error,  setError]  = useState('')
-  const [saving, setSaving] = useState(false)
+  const [name,       setName]       = useState('')
+  const [cap,        setCap]        = useState('10000')
+  const [sd,         setSd]         = useState('2025-01-01')
+  const [ed,         setEd]         = useState('2025-12-31')
+  const [error,      setError]      = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [strategies, setStrategies] = useState<Strategy[]>([])
+  const [strategyId, setStrategyId] = useState<string>('')
+
+  useEffect(() => {
+    if (user) {
+      createClient().from('strategies').select('*').order('created_at', { ascending: false })
+        .then(({ data }) => setStrategies((data as Strategy[]) ?? []))
+    }
+  }, [user])
 
   const totalDays   = Math.max(1, (new Date(ed).getTime() - new Date(sd).getTime()) / 86400000)
   const tradingDays = Math.round(totalDays * 5 / 7)
@@ -167,6 +176,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
       start_capital: parseFloat(cap),
       end_capital:   parseFloat(cap),
       candle_index:  0,
+      strategy_id:   strategyId || null,
     }).select()
     if (err) { setError(err.message); setSaving(false); return }
     const sessionId = (data?.[0] as any)?.id
@@ -197,6 +207,19 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             </div>
             <Badge variant="blue">XAUUSD</Badge>
           </div>
+        </div>
+
+        {/* Strategy picker */}
+        <div>
+          <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Strategy (optional)</p>
+          <select value={strategyId} onChange={e => setStrategyId(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
+            <option value="">No strategy</option>
+            {strategies.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Date range pickers */}
