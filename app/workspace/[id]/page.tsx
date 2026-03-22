@@ -887,6 +887,39 @@ export default function WorkspacePage() {
                 onBlur={e=>{e.currentTarget.style.borderColor=tpError?'var(--red)':'var(--border-default)'}}/>
               {tpError && <p style={{color:'var(--red)',fontSize:10,marginTop:3}}>{tpError}</p>}
             </div>
+            {/* Risk calculator — shows when SL is set */}
+            {slVal && m1Price > 0 && (() => {
+              const entry    = m1Price
+              const sl       = parseFloat(slVal)
+              const tp       = tpVal ? parseFloat(tpVal) : null
+              const qtyNum   = parseFloat(qty) || 0.1
+              const cs       = sym.contractSize
+              if (isNaN(sl) || sl <= 0) return null
+              const riskUsd   = Math.abs(calcPnl('buy', entry, sl, qtyNum, cs))
+              const rewardUsd = tp ? Math.abs(calcPnl('buy', entry, tp, qtyNum, cs)) : null
+              const rr        = rewardUsd && riskUsd > 0 ? (rewardUsd / riskUsd).toFixed(2) : null
+              const riskPct   = balance > 0 ? ((riskUsd / balance) * 100).toFixed(2) : '0'
+              return (
+                <div style={{
+                  background:'var(--bg-primary)', borderRadius:8,
+                  padding:'8px 10px', border:'1px solid var(--border-subtle)',
+                }}>
+                  <p style={{fontSize:9,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Risk Calculator</p>
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    <Row label="Risk $"  value={`-$${riskUsd.toFixed(2)}`}   color="var(--red)" />
+                    <Row label="Risk %"  value={`${riskPct}%`}               color={parseFloat(riskPct)>2?'var(--red)':parseFloat(riskPct)>1?'var(--text-primary)':'var(--green)'} />
+                    {rewardUsd != null && <Row label="Reward $" value={`+$${rewardUsd.toFixed(2)}`} color="var(--green)" />}
+                    {rr && (
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,borderTop:'1px solid var(--border-subtle)',paddingTop:4,marginTop:2}}>
+                        <span style={{color:'var(--text-muted)'}}>R : R</span>
+                        <span style={{fontWeight:700,color:parseFloat(rr)>=2?'var(--green)':parseFloat(rr)>=1?'var(--accent)':'var(--red)'}}>1 : {rr}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
             <div className="flex flex-col gap-2 pt-1">
               <button onClick={() => execTrade('buy')} disabled={accountBreached}
                 className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
@@ -936,6 +969,16 @@ function IndicatorRow({ label, enabled, onToggle, children }: {
         <span style={{ fontSize:12, fontWeight:600, color:'var(--text-primary)' }}>{label}</span>
       </label>
       {enabled && children}
+    </div>
+  )
+}
+
+// ── Risk calculator row ───────────────────────────────────────────
+function Row({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ fontWeight: 700, color }}>{value}</span>
     </div>
   )
 }

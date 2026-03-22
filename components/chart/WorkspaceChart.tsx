@@ -604,8 +604,10 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
                     whiteSpace: 'nowrap', userSelect: 'none',
                     boxShadow: '0 1px 5px rgba(0,0,0,0.35)',
                   }}>
-                    <span style={{ opacity: 0.9 }}>{trade.quantity}</span>
-                    <span style={{ color: slPnl >= 0 ? '#d1fae5' : '#fee2e2', fontWeight: 700 }}>
+                    <span style={{ opacity: 0.75, fontSize: 10 }}>SL</span>
+                    <span style={{ opacity: 0.9 }}>{trade.stop_loss!.toFixed(2)}</span>
+                    <span style={{ opacity: 0.4, fontSize: 9 }}>│</span>
+                    <span style={{ color: '#fee2e2', fontWeight: 700 }}>
                       {slPnl >= 0 ? '+' : ''}{slPnl.toFixed(2)} USD
                     </span>
                     <TvCloseBtn onClick={() => onSetSL?.(trade.id, 0)} />
@@ -624,8 +626,10 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
                     whiteSpace: 'nowrap', userSelect: 'none',
                     boxShadow: '0 1px 5px rgba(0,0,0,0.35)',
                   }}>
-                    <span style={{ opacity: 0.9 }}>{trade.quantity}</span>
-                    <span style={{ color: tpPnl >= 0 ? '#d1fae5' : '#fee2e2', fontWeight: 700 }}>
+                    <span style={{ opacity: 0.75, fontSize: 10 }}>TP</span>
+                    <span style={{ opacity: 0.9 }}>{trade.take_profit!.toFixed(2)}</span>
+                    <span style={{ opacity: 0.4, fontSize: 9 }}>│</span>
+                    <span style={{ color: '#d1fae5', fontWeight: 700 }}>
                       {tpPnl >= 0 ? '+' : ''}{tpPnl.toFixed(2)} USD
                     </span>
                     <TvCloseBtn onClick={() => onSetTP?.(trade.id, 0)} />
