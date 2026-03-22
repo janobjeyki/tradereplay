@@ -216,17 +216,20 @@ export default function StrategyPage() {
 
 function CreateStrategyModal({ onClose, onCreate }: { onClose: () => void; onCreate: () => void }) {
   const { user }    = useAuth()
-  const [name,  setName]   = useState('')
-  const [desc,  setDesc]   = useState('')
-  const [color, setColor]  = useState(STRATEGY_COLORS[0])
-  const [error, setError]  = useState('')
-  const [saving,setSaving] = useState(false)
+  const [name,      setName]      = useState('')
+  const [desc,      setDesc]      = useState('')
+  const [color,     setColor]     = useState(STRATEGY_COLORS[0])
+  const [error,     setError]     = useState('')
+  const [saving,    setSaving]    = useState(false)
+  const [checkItems,setCheckItems]= useState<string[]>([''])
 
   async function handleCreate() {
     if (!name.trim()) { setError('Strategy name is required'); return }
     setSaving(true)
+    const checklist = checkItems.map(s => s.trim()).filter(Boolean)
     const { error: err } = await createClient().from('strategies').insert({
       user_id: user!.id, name: name.trim(), description: desc.trim() || null, color,
+      checklist: checklist.length > 0 ? checklist : null,
     })
     if (err) { setError(err.message); setSaving(false); return }
     onCreate()
@@ -244,6 +247,39 @@ function CreateStrategyModal({ onClose, onCreate }: { onClose: () => void; onCre
             className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
             style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
         </div>
+        {/* Checklist */}
+        <div>
+          <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+            Checklist <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional — shown in workspace)</span>
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {checkItems.map((item, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>☐</span>
+                <input
+                  value={item}
+                  onChange={e => { const n = [...checkItems]; n[i] = e.target.value; setCheckItems(n) }}
+                  onKeyDown={e => { if (e.key === 'Enter') setCheckItems(p => [...p, '']) }}
+                  placeholder={`Rule ${i + 1}...`}
+                  style={{
+                    flex: 1, padding: '6px 10px', fontSize: 13, borderRadius: 8,
+                    background: 'var(--bg-primary)', border: '1px solid var(--border-default)',
+                    color: 'var(--text-primary)', outline: 'none',
+                  }}
+                />
+                {checkItems.length > 1 && (
+                  <button onClick={() => setCheckItems(p => p.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, padding: 0 }}>×</button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => setCheckItems(p => [...p, ''])} style={{
+              alignSelf: 'flex-start', fontSize: 12, color: 'var(--accent)',
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            }}>+ Add rule</button>
+          </div>
+        </div>
+
         <div>
           <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>Color</p>
           <div className="flex gap-2 flex-wrap">

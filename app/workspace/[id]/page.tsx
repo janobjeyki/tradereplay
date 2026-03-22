@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useLang } from '@/contexts/LangContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { ThemeToggle } from '@/components/ui'
-import type { Session, Trade, Candle, Symbol } from '@/types'
+import type { Session, Trade, Candle, Symbol, Strategy } from '@/types'
 import type { TimeFrame } from '@/lib/loadCsvData'
 import { getSymbol } from '@/data/symbols'
 import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
@@ -46,6 +46,9 @@ export default function WorkspacePage() {
   const supabase = createClient()
 
   const [session,         setSession]         = useState<Session | null>(null)
+  const [strategy,        setStrategy]        = useState<Strategy | null>(null)
+  const [checkOpen,       setCheckOpen]       = useState(false)
+  const [checkedItems,    setCheckedItems]    = useState<Record<number, boolean>>({})
   // m1Loaded triggers recompute of aggregatedCandles when data arrives
   const [m1Loaded,        setM1Loaded]        = useState(false)
   const [trades,          setTrades]          = useState<Trade[]>([])
@@ -145,6 +148,12 @@ export default function WorkspacePage() {
 
     setM1AbsIdx(savedM1Abs)
     setM1Loaded(true)  // triggers aggregatedCandles recompute
+
+    // Load strategy if session has one
+    if (s.strategy_id) {
+      const { data: strat } = await supabase.from('strategies').select('*').eq('id', s.strategy_id).single()
+      if (strat) setStrategy(strat as Strategy)
+    }
 
     const { data: openTrades } = await supabase
       .from('trades').select('*').eq('session_id', id).eq('status', 'open')
@@ -422,6 +431,72 @@ export default function WorkspacePage() {
           style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>← Back</button>
         <Badge variant="blue">{session.symbol}</Badge>
         <span className="text-xs truncate max-w-[180px]" style={{color:'var(--text-muted)'}}>{session.name}</span>
+
+        {/* Strategy checklist dropdown */}
+        {strategy && (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setCheckOpen(p => !p)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${checkOpen ? strategy.color : 'var(--border-default)'}`,
+                background: checkOpen ? `${strategy.color}18` : 'var(--bg-tertiary)',
+                color: checkOpen ? strategy.color : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+              }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: strategy.color, flexShrink: 0 }} />
+              {strategy.name}
+              <span style={{ fontSize: 10, opacity: 0.7 }}>{checkOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {checkOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 100,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border-default)',
+                borderRadius: 12, padding: '14px 16px', minWidth: 260,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  Strategy Rules
+                </p>
+                {strategy.checklist && strategy.checklist.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {strategy.checklist.map((item, i) => (
+                      <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                        <input type="checkbox"
+                          checked={!!checkedItems[i]}
+                          onChange={e => setCheckedItems(p => ({ ...p, [i]: e.target.checked }))}
+                          style={{ marginTop: 1, accentColor: strategy.color, width: 14, height: 14, flexShrink: 0 }}
+                        />
+                        <span style={{
+                          fontSize: 13, color: checkedItems[i] ? 'var(--text-muted)' : 'var(--text-primary)',
+                          textDecoration: checkedItems[i] ? 'line-through' : 'none',
+                          lineHeight: 1.4,
+                        }}>{item}</span>
+                      </label>
+                    ))}
+                    {/* Progress bar */}
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ height: 3, borderRadius: 2, background: 'var(--border-subtle)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 2, background: strategy.color,
+                          width: `${(Object.values(checkedItems).filter(Boolean).length / strategy.checklist.length) * 100}%`,
+                          transition: 'width 0.3s',
+                        }} />
+                      </div>
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {Object.values(checkedItems).filter(Boolean).length} / {strategy.checklist.length} rules checked
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No rules defined for this strategy.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* OHLC — all from M1 candle, never from aggregated */}
         {m1Candle && (

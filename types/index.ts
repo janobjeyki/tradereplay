@@ -14,6 +14,7 @@ export interface Strategy {
   name:        string
   description: string | null
   color:       string
+  checklist:   string[] | null
   created_at:  string
 }
 

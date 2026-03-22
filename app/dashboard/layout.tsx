@@ -67,6 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const active = pathname.startsWith(item.href)
             return (
               <Link key={item.href} href={item.href}
+                data-tour={item.href.split('/').pop()}
                 className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium mb-0.5 transition-all"
                 style={{
                   background: active ? 'var(--accent-muted)' : 'transparent',
