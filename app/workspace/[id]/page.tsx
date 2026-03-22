@@ -887,39 +887,6 @@ export default function WorkspacePage() {
                 onBlur={e=>{e.currentTarget.style.borderColor=tpError?'var(--red)':'var(--border-default)'}}/>
               {tpError && <p style={{color:'var(--red)',fontSize:10,marginTop:3}}>{tpError}</p>}
             </div>
-            {/* Risk calculator — shows when SL is set */}
-            {slVal && m1Price > 0 && (() => {
-              const entry    = m1Price
-              const sl       = parseFloat(slVal)
-              const tp       = tpVal ? parseFloat(tpVal) : null
-              const qtyNum   = parseFloat(qty) || 0.1
-              const cs       = sym.contractSize
-              if (isNaN(sl) || sl <= 0) return null
-              const riskUsd   = Math.abs(calcPnl('buy', entry, sl, qtyNum, cs))
-              const rewardUsd = tp ? Math.abs(calcPnl('buy', entry, tp, qtyNum, cs)) : null
-              const rr        = rewardUsd && riskUsd > 0 ? (rewardUsd / riskUsd).toFixed(2) : null
-              const riskPct   = balance > 0 ? ((riskUsd / balance) * 100).toFixed(2) : '0'
-              return (
-                <div style={{
-                  background:'var(--bg-primary)', borderRadius:8,
-                  padding:'8px 10px', border:'1px solid var(--border-subtle)',
-                }}>
-                  <p style={{fontSize:9,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>Risk Calculator</p>
-                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                    <Row label="Risk $"  value={`-$${riskUsd.toFixed(2)}`}   color="var(--red)" />
-                    <Row label="Risk %"  value={`${riskPct}%`}               color={parseFloat(riskPct)>2?'var(--red)':parseFloat(riskPct)>1?'var(--text-primary)':'var(--green)'} />
-                    {rewardUsd != null && <Row label="Reward $" value={`+$${rewardUsd.toFixed(2)}`} color="var(--green)" />}
-                    {rr && (
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,borderTop:'1px solid var(--border-subtle)',paddingTop:4,marginTop:2}}>
-                        <span style={{color:'var(--text-muted)'}}>R : R</span>
-                        <span style={{fontWeight:700,color:parseFloat(rr)>=2?'var(--green)':parseFloat(rr)>=1?'var(--accent)':'var(--red)'}}>1 : {rr}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })()}
-
             <div className="flex flex-col gap-2 pt-1">
               <button onClick={() => execTrade('buy')} disabled={accountBreached}
                 className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
@@ -938,6 +905,52 @@ export default function WorkspacePage() {
               </p>
             </div>
           )}
+
+          {/* Risk/Reward for each open trade that has SL or TP */}
+          {openTr.filter(tr => tr.stop_loss || tr.take_profit).map(tr => {
+            const cs        = sym.contractSize
+            const riskUsd   = tr.stop_loss  ? Math.abs(calcPnl(tr.side, tr.entry_price, tr.stop_loss,  tr.quantity, cs)) : null
+            const rewardUsd = tr.take_profit ? Math.abs(calcPnl(tr.side, tr.entry_price, tr.take_profit, tr.quantity, cs)) : null
+            const rr        = riskUsd && rewardUsd ? (rewardUsd / riskUsd) : null
+            const riskPct   = riskUsd && balance > 0 ? ((riskUsd / balance) * 100) : null
+            return (
+              <div key={tr.id} className="rounded-xl p-3.5" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                  <span style={{
+                    fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:3,
+                    background: tr.side==='buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                    color: tr.side==='buy' ? 'var(--green)' : 'var(--red)',
+                  }}>{tr.side.toUpperCase()}</span>
+                  <span style={{fontSize:10,color:'var(--text-muted)',fontFamily:'monospace'}}>{tr.entry_price.toFixed(2)}</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                  {riskUsd != null && (
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span style={{fontSize:10,color:'var(--text-muted)'}}>Risk (SL hit)</span>
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        {riskPct != null && <span style={{fontSize:9,color:riskPct>2?'var(--red)':riskPct>1?'var(--text-muted)':'var(--green)',fontWeight:600}}>{riskPct.toFixed(1)}%</span>}
+                        <span style={{fontSize:11,fontWeight:700,color:'var(--red)',fontFamily:'monospace'}}>-${riskUsd.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+                  {rewardUsd != null && (
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span style={{fontSize:10,color:'var(--text-muted)'}}>Reward (TP hit)</span>
+                      <span style={{fontSize:11,fontWeight:700,color:'var(--green)',fontFamily:'monospace'}}>+${rewardUsd.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {rr != null && (
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid var(--border-subtle)',paddingTop:4,marginTop:1}}>
+                      <span style={{fontSize:10,color:'var(--text-muted)'}}>R : R</span>
+                      <span style={{fontSize:12,fontWeight:800,color:rr>=2?'var(--green)':rr>=1?'var(--accent)':'var(--red)'}}>
+                        1 : {rr.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
