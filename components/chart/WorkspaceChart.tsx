@@ -26,6 +26,13 @@ interface Props {
   onSetSL?:      (tradeId: string, price: number) => void
   onSetTP?:      (tradeId: string, price: number) => void
   onCloseTrade?: (tradeId: string) => void
+  // Preview lines before trade execution (dashed)
+  previewSL?:    number | null
+  previewTP?:    number | null
+  previewEntry?: number | null
+  previewSide?:  'buy' | 'sell' | null
+  onPreviewSL?:  (price: number) => void
+  onPreviewTP?:  (price: number) => void
 }
 
 // Colours matching TradingView paper-trading
@@ -37,7 +44,8 @@ const TV_SL         = '#ef4444'   // red (matches SL widget + price line)
 type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
-  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade, indicatorConfig },
+  { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade, indicatorConfig,
+    previewSL, previewTP, previewEntry, previewSide, onPreviewSL, onPreviewTP },
   ref
 ) {
   const containerRef    = useRef<HTMLDivElement>(null)
@@ -471,6 +479,72 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
 
 
 
+
+  // ── Preview price lines (dashed, before trade execution) ────────────
+  const previewLinesRef = useRef<{ sl: any; tp: any; entry: any }>({ sl: null, tp: null, entry: null })
+
+  useEffect(() => {
+    if (!seriesRef.current) return
+    import('lightweight-charts').then(({ LineStyle }) => {
+      if (!seriesRef.current) return
+      const pl = previewLinesRef.current
+      const upsert = (key: 'sl' | 'tp' | 'entry', price: number | null | undefined, color: string) => {
+        if (price != null && price > 0) {
+          if (pl[key]) { pl[key].applyOptions({ price }) }
+          else {
+            try {
+              pl[key] = seriesRef.current.createPriceLine({
+                price, color, lineWidth: 1, lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: key === 'entry' ? (previewSide === 'buy' ? '▲ Entry' : '▼ Entry') : key === 'sl' ? '✕ SL' : '✓ TP',
+              })
+            } catch {}
+          }
+        } else if (pl[key]) {
+          try { seriesRef.current?.removePriceLine(pl[key]) } catch {}
+          pl[key] = null
+        }
+      }
+      const entryClr = (previewSide === 'sell' ? TV_ENTRY_SELL : TV_ENTRY_BUY) + 'aa'
+      upsert('entry', previewEntry, entryClr)
+      upsert('sl',    previewSL,    TV_SL + 'aa')
+      upsert('tp',    previewTP,    TV_TP + 'aa')
+    })
+  }, [previewSL, previewTP, previewEntry, previewSide])
+
+  // Drag preview SL/TP lines on chart to update form inputs
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let dragging: 'sl' | 'tp' | null = null
+    const onDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('button')) return
+      if (!seriesRef.current) return
+      const rect = el.getBoundingClientRect()
+      const y    = e.clientY - rect.top
+      const hitSL = previewSL != null && Math.abs((seriesRef.current.priceToCoordinate(previewSL) ?? -99) - y) < 10
+      const hitTP = previewTP != null && Math.abs((seriesRef.current.priceToCoordinate(previewTP) ?? -99) - y) < 10
+      if (hitSL) { dragging = 'sl'; e.stopPropagation(); }
+      else if (hitTP) { dragging = 'tp'; e.stopPropagation(); }
+    }
+    const onMove = (e: MouseEvent) => {
+      if (!dragging || !seriesRef.current) return
+      const rect  = el.getBoundingClientRect()
+      const price = seriesRef.current.coordinateToPrice(e.clientY - rect.top)
+      if (price == null) return
+      if (dragging === 'sl') onPreviewSL?.(price)
+      if (dragging === 'tp') onPreviewTP?.(price)
+    }
+    const onUp = () => { dragging = null }
+    el.addEventListener('mousedown', onDown, { capture: true })
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      el.removeEventListener('mousedown', onDown)
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [previewSL, previewTP, onPreviewSL, onPreviewTP])
 
   // ── Overlay indicator series ──────────────────────────────────────
   const overlaySeriesRef = useRef<Map<string,any>>(new Map())

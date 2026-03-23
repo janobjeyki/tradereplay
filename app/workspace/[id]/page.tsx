@@ -65,6 +65,7 @@ export default function WorkspacePage() {
   const [accountBreached, setAccountBreached] = useState(false)
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
+  const [tradeSide,       setTradeSide]       = useState<'buy'|'sell'|null>(null)
   const chartHandleRef     = useRef<ChartHandle>(null)
   const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [showIndicators,  setShowIndicators]  = useState(false)
@@ -687,6 +688,12 @@ export default function WorkspacePage() {
               onSetSL={handleSetSL}
               onSetTP={handleSetTP}
               onCloseTrade={closeTrade}
+              previewSide={tradeSide}
+              previewEntry={tradeSide ? m1Price : null}
+              previewSL={tradeSide && slVal ? parseFloat(slVal) || null : null}
+              previewTP={tradeSide && tpVal ? parseFloat(tpVal) || null : null}
+              onPreviewSL={price => setSlVal(parseFloat(price.toFixed(sym.decimals)).toString())}
+              onPreviewTP={price => setTpVal(parseFloat(price.toFixed(sym.decimals)).toString())}
             />
           </div>
 
@@ -855,6 +862,7 @@ export default function WorkspacePage() {
             openPnl={openPnl}
             onBuy={() => execTrade('buy')}
             onSell={() => execTrade('sell')}
+            onSideChange={setTradeSide}
           />
         </div>
       </div>

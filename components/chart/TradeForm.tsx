@@ -22,6 +22,7 @@ interface Props {
   openPnl:        number
   onBuy:          () => void
   onSell:         () => void
+  onSideChange?:  (side: 'buy' | 'sell' | null) => void
 }
 
 type OrderType = 'market' | 'pending'
@@ -32,10 +33,11 @@ export function TradeForm({
   symbol, sellPrice, buyPrice, balance,
   qty, setQty, slVal, setSlVal, tpVal, setTpVal,
   slError, tpError, accountBreached, openTr, openPnl,
-  onBuy, onSell,
+  onBuy, onSell, onSideChange,
 }: Props) {
   const [orderType,   setOrderType]   = useState<OrderType>('market')
   const [activeSide,  setActiveSide]  = useState<'buy' | 'sell' | null>(null)
+  const setSide = (s: 'buy' | 'sell' | null) => { setActiveSide(s); onSideChange?.(s) }
 
   const price     = activeSide === 'sell' ? sellPrice : buyPrice
   const qtyNum    = parseFloat(qty) || 0.01
@@ -71,7 +73,7 @@ export function TradeForm({
   const handleConfirm = () => {
     if (activeSide === 'buy')  onBuy()
     if (activeSide === 'sell') onSell()
-    setActiveSide(null)
+    setSide(null)
   }
 
   return (
@@ -81,7 +83,7 @@ export function TradeForm({
       <div style={{ display: 'flex', position: 'relative', borderBottom: '1px solid var(--border-subtle)' }}>
         {/* Sell */}
         <button
-          onClick={() => setActiveSide(s => s === 'sell' ? null : 'sell')}
+          onClick={() => setSide(activeSide === 'sell' ? null : 'sell')}
           style={{
             flex: 1, padding: '14px 12px', textAlign: 'left', border: 'none', cursor: 'pointer',
             background: activeSide === 'sell' ? 'rgba(239,68,68,0.12)' : 'transparent',
@@ -106,7 +108,7 @@ export function TradeForm({
 
         {/* Buy */}
         <button
-          onClick={() => setActiveSide(s => s === 'buy' ? null : 'buy')}
+          onClick={() => setSide(activeSide === 'buy' ? null : 'buy')}
           style={{
             flex: 1, padding: '14px 12px', textAlign: 'right', border: 'none', cursor: 'pointer',
             background: activeSide === 'buy' ? 'rgba(59,130,246,0.12)' : 'transparent',
@@ -240,7 +242,7 @@ export function TradeForm({
               }}>
               Confirm {activeSide === 'buy' ? 'Buy' : 'Sell'} {qtyNum.toFixed(2)} lots
             </button>
-            <button onClick={() => setActiveSide(null)} style={{
+            <button onClick={() => setSide(null)} style={{
               width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--border-default)',
               background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer',
             }}>Cancel</button>
