@@ -248,18 +248,9 @@ export function TradeForm({
             }}>Cancel</button>
           </>
         ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setActiveSide('sell'); onSell() }} disabled={accountBreached} style={{
-              flex: 1, padding: '13px 8px', borderRadius: 10, border: 'none',
-              background: 'var(--red)', color: '#fff', fontSize: 13, fontWeight: 800,
-              cursor: 'pointer', opacity: accountBreached ? 0.4 : 1,
-            }}>Sell</button>
-            <button onClick={() => { setActiveSide('buy'); onBuy() }} disabled={accountBreached} style={{
-              flex: 1, padding: '13px 8px', borderRadius: 10, border: 'none',
-              background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 800,
-              cursor: 'pointer', opacity: accountBreached ? 0.4 : 1,
-            }}>Buy</button>
-          </div>
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', padding: '6px 0' }}>
+            Select Sell or Buy above to place an order
+          </p>
         )}
       </div>
     </div>
