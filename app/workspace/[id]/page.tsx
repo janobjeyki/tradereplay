@@ -14,6 +14,7 @@ import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
 import { calcPnl, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
 import { Spinner, Badge, TabBar } from '@/components/ui'
 import { WorkspaceChart, type ChartHandle } from '@/components/chart/WorkspaceChart'
+import { TradeForm } from '@/components/chart/TradeForm'
 import { IndicatorPanes, DEFAULT_INDICATOR_CONFIG, type IndicatorConfig } from '@/components/chart/IndicatorPanes'
 
 const SKIP_OPTIONS = [3, 5, 10, 15, 30, 60, 120, 240]
@@ -834,123 +835,27 @@ export default function WorkspacePage() {
           </div>
         </div>
 
-        {/* Right panel */}
-        <div className="w-52 shrink-0 flex flex-col gap-3 overflow-y-auto p-3"
-          style={{borderLeft:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
-          <div className="rounded-xl p-4" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
-            <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('currentPrice')}</p>
-            <p className="font-mono text-xl font-bold" style={{color:'var(--accent)'}}>
-              {m1Price ? fmtPrice(m1Price, sym.decimals) : '—'}
-            </p>
-            <div className="flex gap-4 mt-2.5">
-              <div>
-                <p className="text-[9px] uppercase" style={{color:'var(--text-muted)'}}>High</p>
-                <p className="font-mono text-xs" style={{color:'var(--green)'}}>{m1High ? fmtPrice(m1High, sym.decimals) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-[9px] uppercase" style={{color:'var(--text-muted)'}}>Low</p>
-                <p className="font-mono text-xs" style={{color:'var(--red)'}}>{m1Low ? fmtPrice(m1Low, sym.decimals) : '—'}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
-            <div>
-              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{t('quantity')}</p>
-              <input type="number" value={qty} step="0.01" min="0.01" onChange={e=>setQty(e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
-                style={{background:'var(--bg-primary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}
-                onFocus={e=>{e.currentTarget.style.borderColor='var(--accent)'}}
-                onBlur={e=>{e.currentTarget.style.borderColor='var(--border-default)'}}/>
-            </div>
-            <div>
-              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>
-                {t('stopLoss')} <span style={{fontWeight:400,opacity:0.6}}>(optional)</span>
-              </p>
-              <input type="number" value={slVal} step="0.1" placeholder="—"
-                onChange={e=>{setSlVal(e.target.value);setSlError('')}}
-                className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
-                style={{background:'var(--bg-primary)', border:slError?'1px solid var(--red)':'1px solid var(--border-default)', color:'var(--text-primary)'}}
-                onFocus={e=>{e.currentTarget.style.borderColor='var(--red)'}}
-                onBlur={e=>{e.currentTarget.style.borderColor=slError?'var(--red)':'var(--border-default)'}}/>
-              {slError && <p style={{color:'var(--red)',fontSize:10,marginTop:3}}>{slError}</p>}
-            </div>
-            <div>
-              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>
-                {t('takeProfit')} <span style={{fontWeight:400,opacity:0.6}}>(optional)</span>
-              </p>
-              <input type="number" value={tpVal} step="0.1" placeholder="—"
-                onChange={e=>{setTpVal(e.target.value);setTpError('')}}
-                className="w-full rounded-lg px-3 py-2 text-sm font-mono outline-none transition-colors"
-                style={{background:'var(--bg-primary)', border:tpError?'1px solid var(--red)':'1px solid var(--border-default)', color:'var(--text-primary)'}}
-                onFocus={e=>{e.currentTarget.style.borderColor='var(--green)'}}
-                onBlur={e=>{e.currentTarget.style.borderColor=tpError?'var(--red)':'var(--border-default)'}}/>
-              {tpError && <p style={{color:'var(--red)',fontSize:10,marginTop:3}}>{tpError}</p>}
-            </div>
-            <div className="flex flex-col gap-2 pt-1">
-              <button onClick={() => execTrade('buy')} disabled={accountBreached}
-                className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{background:'var(--green)'}}>{t('buy')}</button>
-              <button onClick={() => execTrade('sell')} disabled={accountBreached}
-                className="w-full py-3 font-bold text-sm rounded-lg text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{background:'var(--red)'}}>{t('sell')}</button>
-            </div>
-          </div>
-
-          {openTr.length > 0 && (
-            <div className="rounded-xl p-4" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
-              <p className="text-[9px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>Open ({openTr.length})</p>
-              <p className="font-mono text-sm font-semibold" style={{color: openPnl>=0?'var(--green)':'var(--red)'}}>
-                {openPnl>=0?'+':''}{openPnl.toFixed(2)}
-              </p>
-            </div>
-          )}
-
-          {/* Risk/Reward for each open trade that has SL or TP */}
-          {openTr.filter(tr => tr.stop_loss || tr.take_profit).map(tr => {
-            const cs        = sym.contractSize
-            const riskUsd   = tr.stop_loss  ? Math.abs(calcPnl(tr.side, tr.entry_price, tr.stop_loss,  tr.quantity, cs)) : null
-            const rewardUsd = tr.take_profit ? Math.abs(calcPnl(tr.side, tr.entry_price, tr.take_profit, tr.quantity, cs)) : null
-            const rr        = riskUsd && rewardUsd ? (rewardUsd / riskUsd) : null
-            const riskPct   = riskUsd && balance > 0 ? ((riskUsd / balance) * 100) : null
-            return (
-              <div key={tr.id} className="rounded-xl p-3.5" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
-                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-                  <span style={{
-                    fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:3,
-                    background: tr.side==='buy' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                    color: tr.side==='buy' ? 'var(--green)' : 'var(--red)',
-                  }}>{tr.side.toUpperCase()}</span>
-                  <span style={{fontSize:10,color:'var(--text-muted)',fontFamily:'monospace'}}>{tr.entry_price.toFixed(2)}</span>
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                  {riskUsd != null && (
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span style={{fontSize:10,color:'var(--text-muted)'}}>Risk (SL hit)</span>
-                      <div style={{display:'flex',alignItems:'center',gap:4}}>
-                        {riskPct != null && <span style={{fontSize:9,color:riskPct>2?'var(--red)':riskPct>1?'var(--text-muted)':'var(--green)',fontWeight:600}}>{riskPct.toFixed(1)}%</span>}
-                        <span style={{fontSize:11,fontWeight:700,color:'var(--red)',fontFamily:'monospace'}}>-${riskUsd.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
-                  {rewardUsd != null && (
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span style={{fontSize:10,color:'var(--text-muted)'}}>Reward (TP hit)</span>
-                      <span style={{fontSize:11,fontWeight:700,color:'var(--green)',fontFamily:'monospace'}}>+${rewardUsd.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {rr != null && (
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid var(--border-subtle)',paddingTop:4,marginTop:1}}>
-                      <span style={{fontSize:10,color:'var(--text-muted)'}}>R : R</span>
-                      <span style={{fontSize:12,fontWeight:800,color:rr>=2?'var(--green)':rr>=1?'var(--accent)':'var(--red)'}}>
-                        1 : {rr.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+        {/* Right panel — Exness-style trading form */}
+        <div style={{
+          width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)',
+          overflow: 'hidden',
+        }}>
+          <TradeForm
+            symbol={sym}
+            sellPrice={m1Price}
+            buyPrice={m1Price}
+            balance={balance}
+            qty={qty} setQty={setQty}
+            slVal={slVal} setSlVal={setSlVal}
+            tpVal={tpVal} setTpVal={setTpVal}
+            slError={slError} tpError={tpError}
+            accountBreached={accountBreached}
+            openTr={openTr}
+            openPnl={openPnl}
+            onBuy={() => execTrade('buy')}
+            onSell={() => execTrade('sell')}
+          />
         </div>
       </div>
     </div>
