@@ -66,6 +66,8 @@ export default function WorkspacePage() {
   const [slError,         setSlError]         = useState('')
   const [tpError,         setTpError]         = useState('')
   const [tradeSide,       setTradeSide]       = useState<'buy'|'sell'|null>(null)
+  const [entryVal,        setEntryVal]        = useState('')
+  const [orderType,       setOrderType]       = useState<'market'|'pending'>('market')
   const chartHandleRef     = useRef<ChartHandle>(null)
   const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [showIndicators,  setShowIndicators]  = useState(false)
@@ -689,11 +691,12 @@ export default function WorkspacePage() {
               onSetTP={handleSetTP}
               onCloseTrade={closeTrade}
               previewSide={tradeSide}
-              previewEntry={tradeSide ? m1Price : null}
+              previewEntry={tradeSide ? (orderType==='pending' && entryVal ? parseFloat(entryVal) : m1Price) : null}
               previewSL={tradeSide && slVal ? parseFloat(slVal) || null : null}
               previewTP={tradeSide && tpVal ? parseFloat(tpVal) || null : null}
               onPreviewSL={price => setSlVal(parseFloat(price.toFixed(sym.decimals)).toString())}
               onPreviewTP={price => setTpVal(parseFloat(price.toFixed(sym.decimals)).toString())}
+              onPreviewEntry={price => setEntryVal(parseFloat(price.toFixed(sym.decimals)).toString())}
             />
           </div>
 
@@ -857,12 +860,14 @@ export default function WorkspacePage() {
             slVal={slVal} setSlVal={setSlVal}
             tpVal={tpVal} setTpVal={setTpVal}
             slError={slError} tpError={tpError}
+            entryVal={entryVal} setEntryVal={setEntryVal}
             accountBreached={accountBreached}
             openTr={openTr}
             openPnl={openPnl}
             onBuy={() => execTrade('buy')}
             onSell={() => execTrade('sell')}
             onSideChange={setTradeSide}
+            onOrderTypeChange={setOrderType}
           />
         </div>
       </div>

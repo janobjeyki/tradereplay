@@ -31,8 +31,9 @@ interface Props {
   previewTP?:    number | null
   previewEntry?: number | null
   previewSide?:  'buy' | 'sell' | null
-  onPreviewSL?:  (price: number) => void
-  onPreviewTP?:  (price: number) => void
+  onPreviewSL?:   (price: number) => void
+  onPreviewTP?:   (price: number) => void
+  onPreviewEntry?: (price: number) => void
 }
 
 // Colours matching TradingView paper-trading
@@ -45,7 +46,7 @@ type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
   { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade, indicatorConfig,
-    previewSL, previewTP, previewEntry, previewSide, onPreviewSL, onPreviewTP },
+    previewSL, previewTP, previewEntry, previewSide, onPreviewSL, onPreviewTP, onPreviewEntry },
   ref
 ) {
   const containerRef    = useRef<HTMLDivElement>(null)
@@ -505,46 +506,58 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
           pl[key] = null
         }
       }
-      const entryClr = (previewSide === 'sell' ? TV_ENTRY_SELL : TV_ENTRY_BUY) + 'aa'
+      const entryClr = (previewSide === 'sell' ? TV_ENTRY_SELL : TV_ENTRY_BUY) + 'cc'
       upsert('entry', previewEntry, entryClr)
-      upsert('sl',    previewSL,    TV_SL + 'aa')
-      upsert('tp',    previewTP,    TV_TP + 'aa')
+      upsert('sl',    previewSL,    TV_SL + 'cc')
+      upsert('tp',    previewTP,    TV_TP + 'cc')
     })
   }, [previewSL, previewTP, previewEntry, previewSide])
 
-  // Drag preview SL/TP lines on chart to update form inputs
+  // Drag preview SL/TP/Entry lines on chart to update form inputs
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    let dragging: 'sl' | 'tp' | null = null
+    let dragging: 'sl' | 'tp' | 'entry' | null = null
+
+    const hitY = (price: number | null | undefined) => {
+      if (price == null || !seriesRef.current) return false
+      const coord = seriesRef.current.priceToCoordinate(price)
+      return coord != null ? (y: number) => Math.abs(coord - y) < 10 : () => false
+    }
+
     const onDown = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('button')) return
       if (!seriesRef.current) return
       const rect = el.getBoundingClientRect()
       const y    = e.clientY - rect.top
-      const hitSL = previewSL != null && Math.abs((seriesRef.current.priceToCoordinate(previewSL) ?? -99) - y) < 10
-      const hitTP = previewTP != null && Math.abs((seriesRef.current.priceToCoordinate(previewTP) ?? -99) - y) < 10
-      if (hitSL) { dragging = 'sl'; e.stopPropagation(); }
-      else if (hitTP) { dragging = 'tp'; e.stopPropagation(); }
+      const slCoord    = previewSL    != null ? seriesRef.current.priceToCoordinate(previewSL)    : null
+      const tpCoord    = previewTP    != null ? seriesRef.current.priceToCoordinate(previewTP)    : null
+      const entryCoord = previewEntry != null ? seriesRef.current.priceToCoordinate(previewEntry) : null
+      if (slCoord    != null && Math.abs(slCoord    - y) < 12) { dragging = 'sl';    e.preventDefault(); e.stopPropagation() }
+      else if (tpCoord    != null && Math.abs(tpCoord    - y) < 12) { dragging = 'tp';    e.preventDefault(); e.stopPropagation() }
+      else if (entryCoord != null && Math.abs(entryCoord - y) < 12) { dragging = 'entry'; e.preventDefault(); e.stopPropagation() }
     }
     const onMove = (e: MouseEvent) => {
       if (!dragging || !seriesRef.current) return
+      e.preventDefault()
       const rect  = el.getBoundingClientRect()
       const price = seriesRef.current.coordinateToPrice(e.clientY - rect.top)
       if (price == null) return
-      if (dragging === 'sl') onPreviewSL?.(price)
-      if (dragging === 'tp') onPreviewTP?.(price)
+      if (dragging === 'sl')    onPreviewSL?.   (price)
+      if (dragging === 'tp')    onPreviewTP?.   (price)
+      if (dragging === 'entry') onPreviewEntry?.(price)
     }
     const onUp = () => { dragging = null }
-    el.addEventListener('mousedown', onDown, { capture: true })
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+
+    el.addEventListener('mousedown', onDown)
+    window.addEventListener('mousemove', onMove, { passive: false })
+    window.addEventListener('mouseup',   onUp)
     return () => {
       el.removeEventListener('mousedown', onDown)
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup',   onUp)
     }
-  }, [previewSL, previewTP, onPreviewSL, onPreviewTP])
+  }, [previewSL, previewTP, previewEntry, onPreviewSL, onPreviewTP, onPreviewEntry])
 
   // ── Overlay indicator series ──────────────────────────────────────
   const overlaySeriesRef = useRef<Map<string,any>>(new Map())
