@@ -9,11 +9,16 @@ export function DayPerformanceChart({ byDay }: { byDay: Record<string, DayStats>
   const { theme } = useTheme()
 
   useEffect(() => {
-    if (!canvasRef.current) return
+    const canvasEl = canvasRef.current
+    if (!canvasEl) return
+    let disposed = false
+
     const draw = () => {
-      const canvas = canvasRef.current!
+      const canvas = canvasRef.current
+      if (!canvas || disposed) return
       const dpr = window.devicePixelRatio || 1
       const rect = canvas.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
       canvas.width = rect.width*dpr; canvas.height = rect.height*dpr
       const ctx = canvas.getContext('2d')!
       ctx.scale(dpr, dpr)
@@ -48,8 +53,12 @@ export function DayPerformanceChart({ byDay }: { byDay: Record<string, DayStats>
       })
     }
     draw()
-    const ro = new ResizeObserver(draw); ro.observe(canvasRef.current)
-    return () => ro.disconnect()
+    const ro = new ResizeObserver(() => draw())
+    ro.observe(canvasEl)
+    return () => {
+      disposed = true
+      ro.disconnect()
+    }
   }, [byDay, theme])
 
   return <canvas ref={canvasRef} style={{width:'100%', height:'150px', display:'block'}}/>

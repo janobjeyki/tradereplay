@@ -5,7 +5,7 @@ import { AuthProvider }  from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 
 export const metadata: Metadata = {
-  title: 'BackTest — Candle Replay Platform',
+  title: 'TradeLab — Candle Replay Platform',
   description: 'Replay real Dukascopy historical data candle-by-candle.',
 }
 

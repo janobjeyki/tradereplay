@@ -353,12 +353,10 @@ function PriceField({ value, onChange, placeholder, suffix, onClear, onMinus, on
             display:'flex', alignItems:'center' }}>{suffix}</span>
         )}
         <button onClick={onMinus} style={{ padding:'0 9px', background:'none',
-          borderLeft:'1px solid var(--border-subtle)', border:'none',
           borderLeft:'1px solid var(--border-subtle)',
           color:'var(--text-muted)', cursor:'pointer', fontSize:16, lineHeight:1,
           alignSelf:'stretch', display:'flex', alignItems:'center' }}>−</button>
         <button onClick={onPlus} style={{ padding:'0 9px', background:'none',
-          borderLeft:'1px solid var(--border-subtle)', border:'none',
           borderLeft:'1px solid var(--border-subtle)',
           color:'var(--text-muted)', cursor:'pointer', fontSize:16, lineHeight:1,
           alignSelf:'stretch', display:'flex', alignItems:'center' }}>+</button>

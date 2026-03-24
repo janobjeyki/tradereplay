@@ -96,9 +96,9 @@ export function IndicatorPanes({ candles, config, mainChartRef }: Props) {
         const line  = ch.addLineSeries({ color: '#a78bfa', lineWidth: 1, priceLineVisible: false, lastValueVisible: true })
         const ob    = ch.addLineSeries({ color: 'rgba(239,68,68,0.35)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
         const os    = ch.addLineSeries({ color: 'rgba(34,197,94,0.35)',  lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
-        line.setData(toLineSeries(candles, vals))
-        ob.setData(candles.map(c => ({ time: c.time as any, value: 70 })))
-        os.setData(candles.map(c => ({ time: c.time as any, value: 30 })))
+        line.setData(toLineSeries(candles, vals) as any)
+        ob.setData(candles.map(c => ({ time: c.time as any, value: 70 as number } as any)))
+        os.setData(candles.map(c => ({ time: c.time as any, value: 30 as number } as any)))
         syncWith(ch)
       }
 

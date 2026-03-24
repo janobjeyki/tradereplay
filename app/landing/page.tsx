@@ -6,24 +6,20 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { ThemeToggle } from '@/components/ui'
 import { PreviewChart } from '@/components/chart/PreviewChart'
 import type { Language } from '@/types'
+import { TradeLabLogo } from '@/components/ui/Brand'
 
 export default function LandingPage() {
   const { t, lang, setLang } = useLang()
   const { theme, toggleTheme } = useTheme()
 
   return (
-    <div className="min-h-screen flex flex-col" style={{background:'var(--bg-primary)', color:'var(--text-primary)'}}>
+    <div className="min-h-screen flex flex-col" style={{color:'var(--text-primary)'}}>
 
       {/* Nav */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-10 py-3.5 gap-4"
-        style={{borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-primary)', backdropFilter:'blur(12px)'}}>
+      <nav className="sticky top-0 z-50 px-6 md:px-10 pt-6">
+        <div className="glass-card rounded-[24px] flex items-center justify-between px-5 py-3.5 gap-4">
         <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:'var(--accent)'}}>
-            <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-              <path d="M3 13l3-5 3 3 3-6 3 4" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <span className="font-black text-lg tracking-tight">BackTest</span>
+          <TradeLabLogo className="w-[150px]" />
         </div>
 
         <div className="hidden md:flex gap-6 text-sm" style={{color:'var(--text-secondary)'}}>
@@ -52,12 +48,13 @@ export default function LandingPage() {
             {t('getStarted')}
           </Link>
         </div>
+        </div>
       </nav>
 
       {/* Hero */}
-      <section className="grid-bg flex-1 flex flex-col items-center justify-center px-10 py-20 text-center relative overflow-hidden">
+      <section className="grid-bg flex-1 flex flex-col items-center justify-center px-6 md:px-10 py-16 md:py-20 text-center relative overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full pointer-events-none"
-          style={{background:'radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 68%)'}}/>
+          style={{background:'radial-gradient(circle, rgba(244,87,131,0.08) 0%, transparent 68%)'}}/>
 
         <span className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-full mb-5"
           style={{background:'var(--accent-muted)', color:'var(--accent)', border:'1px solid var(--accent-border)'}}>
@@ -86,8 +83,7 @@ export default function LandingPage() {
         </div>
 
         {/* Chart preview */}
-        <div className="mt-14 rounded-2xl p-4 w-full max-w-3xl"
-          style={{background:'var(--bg-secondary)', border:'1px solid var(--border-subtle)'}}>
+        <div className="mt-14 glass-card rounded-2xl p-4 w-full max-w-3xl">
           <div className="flex gap-4 items-center mb-3 px-1">
             <span className="font-bold text-sm">XAU/USD</span>
             <span className="font-mono text-sm" style={{color:'var(--green)'}}>2,649.50</span>
@@ -107,7 +103,7 @@ export default function LandingPage() {
             {e:'📡', t1:t('feat2Title'), d:t('feat2Desc')},
             {e:'📈', t1:t('feat3Title'), d:t('feat3Desc')},
           ].map((f,i) => (
-            <div key={i} className="rounded-xl p-7 transition-all" style={{background:'var(--bg-secondary)', border:'1px solid var(--border-subtle)'}}>
+            <div key={i} className="glass-card rounded-xl p-7 transition-all">
               <div className="text-3xl mb-4">{f.e}</div>
               <h3 className="font-bold text-[17px] mb-2.5 tracking-tight">{f.t1}</h3>
               <p className="leading-relaxed text-sm" style={{color:'var(--text-secondary)'}}>{f.d}</p>
@@ -117,7 +113,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="px-10 py-5 flex justify-between items-center flex-wrap gap-3" style={{borderTop:'1px solid var(--border-subtle)'}}>
-        <span className="font-black" style={{color:'var(--text-secondary)'}}>■ BackTest</span>
+        <span className="font-black" style={{color:'var(--text-secondary)'}}>TradeLab</span>
         <span className="text-xs" style={{color:'var(--text-muted)'}}>Powered by Dukascopy historical tick data</span>
       </footer>
     </div>

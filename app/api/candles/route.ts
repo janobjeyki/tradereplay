@@ -84,7 +84,7 @@ function toH1(mins: MinCandle[]): MinCandle[] {
       h.close = c.close
     }
   }
-  return [...map.values()].sort((a, b) => a.time - b.time)
+  return Array.from(map.values()).sort((a, b) => a.time - b.time)
 }
 
 // ── Dukascopy URL builder ───────────────────────────────────────

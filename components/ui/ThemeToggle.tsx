@@ -3,11 +3,11 @@
 import { useTheme } from '@/contexts/ThemeContext'
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const { theme, toggle } = useTheme()
+  const { theme, toggleTheme } = useTheme()
 
   return (
     <button
-      onClick={toggle}
+      onClick={toggleTheme}
       className={className}
       title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       style={{

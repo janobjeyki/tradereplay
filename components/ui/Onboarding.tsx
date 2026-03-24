@@ -43,6 +43,9 @@ const TOUR_STEPS = [
   },
 ]
 
+type TourStep = (typeof TOUR_STEPS)[number]
+type TooltipStep = Extract<TourStep, { type: 'tooltip' }>
+
 interface TooltipPos { top: number; left: number; arrow: 'left' | 'top' | 'bottom' | 'right' }
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
@@ -58,20 +61,21 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   // Position tooltip relative to target element
   useEffect(() => {
     if (cur.type !== 'tooltip') { setTPos(null); setSpotlight(null); return }
-    const el = document.querySelector(cur.target)
+    const tooltipStep: TooltipStep = cur
+    const el = document.querySelector(tooltipStep.target)
     if (!el) { setTPos(null); setSpotlight(null); return }
 
     const rect = el.getBoundingClientRect()
     setSpotlight(rect)
 
     const pad = 16
-    if (cur.placement === 'right') {
+    if (tooltipStep.placement === 'right') {
       setTPos({
         top:  rect.top + rect.height / 2 - 60,
         left: rect.right + pad,
         arrow: 'left',
       })
-    } else if (cur.placement === 'bottom') {
+    } else if (tooltipStep.placement === 'bottom') {
       setTPos({
         top:  rect.bottom + pad,
         left: rect.left + rect.width / 2 - 140,

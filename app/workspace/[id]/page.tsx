@@ -5,8 +5,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLang } from '@/contexts/LangContext'
-import { useTheme } from '@/contexts/ThemeContext'
-import { ThemeToggle } from '@/components/ui'
 import type { Session, Trade, Candle, Symbol, Strategy } from '@/types'
 import type { TimeFrame } from '@/lib/loadCsvData'
 import { getSymbol } from '@/data/symbols'
@@ -43,7 +41,6 @@ export default function WorkspacePage() {
   const router   = useRouter()
   const { user } = useAuth()
   const { t }    = useLang()
-  const { theme, toggleTheme } = useTheme()
   const supabase = createClient()
 
   const [session,         setSession]         = useState<Session | null>(null)
@@ -407,15 +404,6 @@ export default function WorkspacePage() {
     setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, take_profit: val } : t))
   }
 
-  if (loading || !session) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{background:'var(--bg-primary)'}}>
-        <Spinner size="lg"/>
-        <p className="text-sm" style={{color:'var(--text-muted)'}}>{t('loading')}</p>
-      </div>
-    )
-  }
-
   const sym     = symRef.current
   const m1All   = originalCandlesRef.current
   const m1Candle  = m1All[m1AbsIdx]
@@ -447,6 +435,8 @@ export default function WorkspacePage() {
     ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize), 0)
     : 0
   const equity   = parseFloat((balance + openPnl).toFixed(2))
+  const sessionPnl = session ? equity - session.start_capital : 0
+  const equityColor = sessionPnl > 0 ? 'var(--green)' : sessionPnl < 0 ? 'var(--red)' : 'var(--text-primary)'
 
   const m1Total    = m1All.length
   const m1Playable = m1Total - playableStartIdxRef.current
@@ -471,6 +461,15 @@ export default function WorkspacePage() {
     if (tradeSide === 'buy') return previewPrice > m1Price ? 'Buy Stop' : 'Buy Limit'
     return previewPrice > m1Price ? 'Sell Limit' : 'Sell Stop'
   }, [entryVal, m1Price, orderType, tradeSide])
+
+  if (loading || !session) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{background:'var(--bg-primary)'}}>
+        <Spinner size="lg"/>
+        <p className="text-sm" style={{color:'var(--text-muted)'}}>{t('loading')}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-primary)'}}>
@@ -585,7 +584,7 @@ export default function WorkspacePage() {
         <div className="ml-auto flex items-center gap-4 shrink-0">
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Equity</p>
-            <p className="font-mono font-bold text-base" style={{color:'var(--accent)'}}>
+            <p className="font-mono font-bold text-base" style={{color: equityColor}}>
               {fmtMoney(equity)}
             </p>
           </div>
@@ -605,7 +604,6 @@ export default function WorkspacePage() {
               </p>
             </div>
           )}
-          <ThemeToggle theme={theme} onToggle={toggleTheme}/>
         </div>
       </div>
 
@@ -912,9 +910,9 @@ export default function WorkspacePage() {
 
         {/* Right panel — Exness-style trading form */}
         <div style={{
-          width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column',
           borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)',
-          overflow: 'hidden',
+          overflow: 'auto',
         }}>
           <TradeForm
             symbol={sym}
@@ -942,6 +940,25 @@ export default function WorkspacePage() {
             onSideChange={setTradeSide}
             onOrderTypeChange={t => resetTradeDraft(t)}
           />
+
+          {strategy && (
+            <div style={{ padding: '14px' }}>
+              <div style={{
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 14,
+                padding: '14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: strategy.color, flexShrink: 0 }} />
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{strategy.name}</p>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {strategy.description?.trim() || 'Workspace strategy linked to this replay session.'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -74,8 +74,8 @@ export function aggregateCandles(m1Candles: Candle[], timeframe: TimeFrame): Can
         close: candle.close,
       }
     } else {
-      const currentRoundedTime = Math.floor(current.time / secondsPerPeriod) * secondsPerPeriod
-      const candleRoundedTime = Math.floor(candle.time / secondsPerPeriod) * secondsPerPeriod
+      const currentRoundedTime: number = Math.floor(current.time / secondsPerPeriod) * secondsPerPeriod
+      const candleRoundedTime: number = Math.floor(candle.time / secondsPerPeriod) * secondsPerPeriod
 
       if (currentRoundedTime === candleRoundedTime) {
         // Add to current aggregate candle

@@ -8,11 +8,16 @@ export function EquityCurveChart({ equity, startCapital }: { equity: EquityPoint
   const { theme } = useTheme()
 
   useEffect(() => {
-    if (!canvasRef.current || equity.length < 2) return
+    const canvasEl = canvasRef.current
+    if (!canvasEl || equity.length < 2) return
+    let disposed = false
+
     const draw = () => {
-      const canvas = canvasRef.current!
+      const canvas = canvasRef.current
+      if (!canvas || disposed) return
       const dpr = window.devicePixelRatio || 1
       const rect = canvas.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
       canvas.width = rect.width * dpr; canvas.height = rect.height * dpr
       const ctx = canvas.getContext('2d')!
       ctx.scale(dpr, dpr)
@@ -50,8 +55,12 @@ export function EquityCurveChart({ equity, startCapital }: { equity: EquityPoint
       ctx.stroke()
     }
     draw()
-    const ro = new ResizeObserver(draw); ro.observe(canvasRef.current)
-    return () => ro.disconnect()
+    const ro = new ResizeObserver(() => draw())
+    ro.observe(canvasEl)
+    return () => {
+      disposed = true
+      ro.disconnect()
+    }
   }, [equity, startCapital, theme])
 
   return <canvas ref={canvasRef} style={{width:'100%', height:'180px', display:'block'}}/>

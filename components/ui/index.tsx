@@ -9,11 +9,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
 }
 export function Button({ variant = 'ghost', size = 'md', loading, children, className, disabled, ...props }: ButtonProps) {
-  const base = 'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+  const base = 'inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
   const v: Record<string,string> = {
-    primary: 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] active:scale-[0.98]',
-    ghost:   'bg-transparent text-[var(--text-secondary)] border border-[var(--border-default)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
-    danger:  'bg-transparent text-[var(--red)] border border-[var(--red-muted)] hover:bg-[var(--red-muted)]',
+    primary: 'bg-[linear-gradient(135deg,var(--accent),var(--accent-hover))] text-white shadow-[0_12px_24px_rgba(244,87,131,0.22)] hover:brightness-110 active:scale-[0.98]',
+    ghost:   'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border-default)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
+    danger:  'bg-[var(--red-muted)] text-[var(--red)] border border-[rgba(255,107,149,0.18)] hover:bg-[rgba(255,107,149,0.2)]',
     buy:     'bg-[var(--green)] text-white hover:opacity-90 w-full',
     sell:    'bg-[var(--red)]   text-white hover:opacity-90 w-full',
   }
@@ -32,7 +32,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({ label, error, c
   <div className="flex flex-col gap-1.5">
     {label && <label className="text-[11px] tracking-wider uppercase" style={{color:'var(--text-muted)'}}>{label}</label>}
     <input ref={ref} className={cn(
-      'rounded-lg px-3 py-2.5 text-sm outline-none transition-colors placeholder:opacity-40',
+      'rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors placeholder:opacity-40',
       error ? 'border-[var(--red)]' : '',
       className
     )} style={{
@@ -53,7 +53,7 @@ export function Select({ label, className, children, ...props }: SelectProps) {
   return (
     <div className="flex flex-col gap-1.5">
       {label && <label className="text-[11px] tracking-wider uppercase" style={{color:'var(--text-muted)'}}>{label}</label>}
-      <select className={cn('rounded-lg px-3 py-2.5 text-sm outline-none cursor-pointer appearance-none', className)}
+      <select className={cn('rounded-xl px-3.5 py-2.5 text-sm outline-none cursor-pointer appearance-none', className)}
         style={{
           background:'var(--bg-tertiary)', border:`1px solid var(--border-default)`,
           color:'var(--text-primary)',
@@ -68,23 +68,23 @@ export function Select({ label, className, children, ...props }: SelectProps) {
 interface BadgeProps { variant?: 'blue'|'green'|'red'|'gray'; children: ReactNode; className?: string }
 export function Badge({ variant='gray', children, className }: BadgeProps) {
   const v: Record<string,string> = {
-    blue:  'bg-[var(--accent-muted)] text-[var(--accent)]',
-    green: 'bg-[var(--green-muted)] text-[var(--green)]',
-    red:   'bg-[var(--red-muted)]   text-[var(--red)]',
-    gray:  'bg-[var(--bg-elevated)] text-[var(--text-secondary)]',
+    blue:  'bg-[var(--accent-muted)] text-[var(--accent)] border border-[var(--accent-border)]',
+    green: 'bg-[var(--green-muted)] text-[var(--green)] border border-[rgba(70,215,164,0.18)]',
+    red:   'bg-[var(--red-muted)]   text-[var(--red)] border border-[rgba(255,107,149,0.18)]',
+    gray:  'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)]',
   }
-  return <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold', v[variant], className)}>{children}</span>
+  return <span className={cn('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold', v[variant], className)}>{children}</span>
 }
 
 // ── Card ──────────────────────────────────────────────────────────
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('rounded-xl p-5', className)} style={{background:'var(--bg-secondary)', border:'1px solid var(--border-subtle)'}}>{children}</div>
+  return <div className={cn('glass-card rounded-2xl p-5', className)}>{children}</div>
 }
 
 // ── StatCard ──────────────────────────────────────────────────────
 export function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="rounded-xl px-5 py-4" style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)'}}>
+    <div className="glass-card rounded-2xl px-5 py-4">
       <p className="text-[10px] uppercase tracking-widest mb-1.5" style={{color:'var(--text-muted)'}}>{label}</p>
       <p className="font-mono text-2xl font-bold tracking-tight" style={{color: color ?? 'var(--text-primary)'}}>{value}</p>
     </div>
@@ -94,9 +94,10 @@ export function StatCard({ label, value, color }: { label: string; value: string
 // ── Alert ─────────────────────────────────────────────────────────
 export function Alert({ type, message }: { type: 'error'|'success'; message: string }) {
   if (!message) return null
-  return <div className="px-3.5 py-2.5 rounded-lg text-sm" style={{
+  return <div className="px-3.5 py-2.5 rounded-xl text-sm border" style={{
     background: type==='error' ? 'var(--red-muted)' : 'var(--green-muted)',
     color:      type==='error' ? 'var(--red)'       : 'var(--green)',
+    borderColor: type==='error' ? 'rgba(255,107,149,0.2)' : 'rgba(70,215,164,0.2)',
   }}>{message}</div>
 }
 
@@ -112,8 +113,7 @@ export function Modal({ open, onClose, title, children, width='max-w-md' }: { op
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.75)', backdropFilter:'blur(8px)'}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className={cn('rounded-2xl p-7 w-full max-h-[92vh] overflow-y-auto animate-slide-up', width)}
-        style={{background:'var(--bg-secondary)', border:'1px solid var(--border-default)'}}>
+      <div className={cn('glass-card rounded-[24px] p-7 w-full max-h-[92vh] overflow-y-auto animate-slide-up', width)}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="font-bold text-xl tracking-tight" style={{color:'var(--text-primary)'}}>{title}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded text-xl leading-none transition-colors hover:bg-[var(--bg-elevated)]" style={{color:'var(--text-secondary)'}}>×</button>
@@ -146,8 +146,8 @@ export function TabBar({ tabs, active, onChange }: { tabs:{key:string;label:stri
 export function ThemeToggle({ theme, onToggle }: { theme: 'dark'|'light'; onToggle: ()=>void }) {
   return (
     <button onClick={onToggle} title="Toggle theme"
-      className="w-8 h-8 flex items-center justify-center rounded-lg transition-all hover:bg-[var(--bg-elevated)]"
-      style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>
+      className="w-9 h-9 flex items-center justify-center rounded-full transition-all hover:bg-[var(--bg-elevated)]"
+      style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)', background:'var(--bg-tertiary)'}}>
       {theme === 'dark' ? (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>

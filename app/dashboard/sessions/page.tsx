@@ -10,6 +10,7 @@ import { Button, Badge, Spinner, Modal, Input, Alert } from '@/components/ui'
 import { SubscriptionManager } from '@/components/subscription/SubscriptionManager'
 
 export default function SessionsPage() {
+  const PAGE_SIZE = 8
   const { t }    = useLang()
   const { user, profile, refreshProfile } = useAuth()
   const router   = useRouter()
@@ -18,6 +19,7 @@ export default function SessionsPage() {
   const [showModal, setShowModal] = useState(false)
   const [showPaywall, setShowPaywall] = useState(false)
   const [transactions, setTransactions] = useState<SubscriptionTransaction[]>([])
+  const [page, setPage] = useState(1)
 
   const hasActiveSubscription = profile?.subscription_status === 'active'
   const subscriptionBadge = useMemo(() => (
@@ -32,12 +34,22 @@ export default function SessionsPage() {
         }
   ), [hasActiveSubscription, profile?.subscription_plan, profile?.subscription_price])
 
+  const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE))
+  const pagedSessions = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return sessions.slice(start, start + PAGE_SIZE)
+  }, [page, sessions])
+
   useEffect(() => {
     if (user) {
       fetchSessions()
       fetchTransactions()
     }
   }, [user])
+
+  useEffect(() => {
+    setPage(prev => Math.min(prev, totalPages))
+  }, [totalPages])
 
   async function fetchSessions() {
     const { data } = await createClient()
@@ -86,7 +98,7 @@ export default function SessionsPage() {
             <Badge variant={subscriptionBadge.variant}>{subscriptionBadge.text}</Badge>
           </div>
         </div>
-        <Button variant="primary" onClick={openCreateFlow}>
+        <Button variant="primary" size="lg" onClick={openCreateFlow}>
           <span className="text-lg leading-none mr-0.5">+</span>{t('newSession')}
         </Button>
       </div>
@@ -103,33 +115,39 @@ export default function SessionsPage() {
             <Button variant="primary" onClick={openCreateFlow}>+ {t('newSession')}</Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-2 animate-fade-in">
+          <div className="flex flex-col gap-3 animate-fade-in">
             {/* Column headers */}
             <div className="grid px-4 pb-1 gap-2"
-              style={{ gridTemplateColumns: '2fr 90px 160px 90px 100px 70px 100px 80px' }}>
+              style={{ gridTemplateColumns: '2fr 112px 172px 96px 112px 70px 100px 84px' }}>
               {['Session', t('symbol'), t('period'), t('startCap'), t('endCap'), t('winRate'), '', ''].map((h, i) => (
                 <span key={i} className="text-[10px] uppercase tracking-widest"
                   style={{ color: 'var(--text-muted)' }}>{h}</span>
               ))}
             </div>
 
-            {sessions.map(s => {
+            {pagedSessions.map(s => {
               const isProfit = s.end_capital >= s.start_capital
               const winRate  = (s as any).win_rate ?? 0
               return (
                 <div key={s.id}
                   onClick={() => router.push(`/workspace/${s.id}`)}
-                  className="rounded-xl px-4 py-3.5 cursor-pointer transition-all duration-150"
+                  className="rounded-2xl px-4 py-4 cursor-pointer transition-all duration-150"
                   style={{
                     background: 'var(--bg-secondary)',
                     border: '1px solid var(--border-subtle)',
                     display: 'grid',
-                    gridTemplateColumns: '2fr 90px 160px 90px 100px 70px 100px 80px',
+                    gridTemplateColumns: '2fr 112px 172px 96px 112px 70px 100px 84px',
                     gap: '8px',
                     alignItems: 'center',
                   }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'
+                    ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'
+                    ;(e.currentTarget as HTMLElement).style.transform = 'translateY(0)'
+                  }}
                 >
                   <div>
                     <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{s.name}</p>
@@ -137,7 +155,9 @@ export default function SessionsPage() {
                       {s.is_completed ? '✓ Completed' : s.candle_index > 0 ? `Candle ${s.candle_index}` : 'Not started'}
                     </p>
                   </div>
-                  <Badge variant="blue">{s.symbol}</Badge>
+                  <div className="flex justify-center">
+                    <Badge variant="blue" className="justify-center text-center whitespace-nowrap w-full max-w-[110px]">{s.symbol}</Badge>
+                  </div>
                   <span className="font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
                     {s.start_date}<br />{s.end_date}
                   </span>
@@ -152,11 +172,11 @@ export default function SessionsPage() {
                   }}>
                     {winRate > 0 ? winRate + '%' : '—'}
                   </span>
-                  <Button size="sm" variant="ghost"
+                  <Button size="sm" variant="ghost" className="font-semibold"
                     onClick={e => { e.stopPropagation(); router.push(`/workspace/${s.id}`) }}>
                     {t('openSession')}
                   </Button>
-                  <Button size="sm" variant="ghost"
+                  <Button size="sm" variant="ghost" className="font-semibold"
                     onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
                     style={{color: 'var(--red)', border: '1px solid var(--red-muted)'}}>
                     Delete
@@ -164,6 +184,35 @@ export default function SessionsPage() {
                 </div>
               )
             })}
+
+            {sessions.length > PAGE_SIZE && (
+              <div className="flex items-center justify-between pt-3">
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, sessions.length)} of {sessions.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={page === 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                  >
+                    Prev
+                  </Button>
+                  <span className="text-xs font-medium min-w-[72px] text-center" style={{ color: 'var(--text-secondary)' }}>
+                    {page} / {totalPages}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={page === totalPages}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

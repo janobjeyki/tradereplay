@@ -66,6 +66,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
   const openTradesRef   = useRef<Trade[]>(openTrades)
   const prevPosRef      = useRef<Map<string, LineYPositions>>(new Map())
   const previewDraggingRef = useRef<'sl' | 'tp' | 'entry' | null>(null)
+  const themeRef        = useRef(theme)
 
   // Fix 6: temp line shown while dragging from entry line to create SL/TP
   const [dragLine, setDragLine] = useState<{ y: number; isTP: boolean } | null>(null)
@@ -73,6 +74,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
   useImperativeHandle(ref, () => ({ chartRef: chartRef }))
 
   useEffect(() => { openTradesRef.current = openTrades }, [openTrades])
+  useEffect(() => { themeRef.current = theme }, [theme])
 
   const normalizePreviewPrice = useCallback((kind: 'sl' | 'tp' | 'entry', price: number) => {
     if (kind === 'entry' || previewEntry == null || !previewSide) return price
@@ -87,14 +89,16 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       : Math.max(price, previewEntry + minStep)
   }, [previewEntry, previewSide, symbol.decimals, symbol.pipSize])
 
-  const getColors = useCallback(() => {
-    const d = theme === 'dark'
+  const getColorsForTheme = useCallback((mode: 'dark' | 'light') => {
+    const d = mode === 'dark'
     return {
       bg:     d ? '#060a14' : '#ffffff',
       text:   d ? '#4a6280' : '#7090b0',
       border: d ? '#1e2d45' : '#c8d8ee',
     }
-  }, [theme])
+  }, [])
+
+  const getColors = useCallback(() => getColorsForTheme(theme), [getColorsForTheme, theme])
 
   // Sync Y positions — uses draggingPriceRef so overlay tracks live during drag
   const syncPositions = useCallback(() => {
@@ -155,7 +159,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
 
       import('lightweight-charts').then(lc => {
         if (!containerRef.current) return
-        const c = getColors()
+        const c = getColorsForTheme(themeRef.current)
 
         const chart = lc.createChart(containerRef.current, {
           layout:  { background: { color: c.bg }, textColor: c.text },
@@ -378,7 +382,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       draggingRef.current    = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getColors, scheduleSyncPositions])
+  }, [getColorsForTheme, scheduleSyncPositions])
 
   // ── Theme ────────────────────────────────────────────────────────
   useEffect(() => {
