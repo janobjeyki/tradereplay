@@ -119,6 +119,13 @@ export function checkSlTp(trade: Trade, candle: Candle): number | null {
   return null
 }
 
+export function checkPendingEntry(trade: Trade, candle: Candle): number | null {
+  if (trade.status !== 'pending') return null
+  return candle.low <= trade.entry_price && candle.high >= trade.entry_price
+    ? trade.entry_price
+    : null
+}
+
 // ── Class helper ─────────────────────────────────────────────────
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ')

@@ -19,6 +19,8 @@ const NAV = [
     icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><polyline points="1,13 4,8 7,10 10,5 13,7 15,3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg> },
   { href:'/dashboard/settings',  label:'Settings',
     icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.93 2.93l1.41 1.41M11.66 11.66l1.41 1.41M2.93 13.07l1.41-1.41M11.66 4.34l1.41-1.41" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
+  { href:'/dashboard/subscription',  label:'Subscription',
+    icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M2 6h12" stroke="currentColor" strokeWidth="1.4"/><circle cx="11.5" cy="10" r="1.2" fill="currentColor"/></svg> },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

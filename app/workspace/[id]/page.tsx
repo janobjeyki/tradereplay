@@ -11,7 +11,7 @@ import type { Session, Trade, Candle, Symbol, Strategy } from '@/types'
 import type { TimeFrame } from '@/lib/loadCsvData'
 import { getSymbol } from '@/data/symbols'
 import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
-import { calcPnl, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
+import { calcPnl, checkPendingEntry, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
 import { Spinner, Badge, TabBar } from '@/components/ui'
 import { WorkspaceChart, type ChartHandle } from '@/components/chart/WorkspaceChart'
 import { TradeForm } from '@/components/chart/TradeForm'
@@ -71,6 +71,16 @@ export default function WorkspacePage() {
   const chartHandleRef     = useRef<ChartHandle>(null)
   const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
   const [showIndicators,  setShowIndicators]  = useState(false)
+
+  const resetTradeDraft = useCallback((nextOrderType?: 'market' | 'pending') => {
+    setQty('0.10')
+    setSlVal('')
+    setTpVal('')
+    setEntryVal('')
+    setSlError('')
+    setTpError('')
+    if (nextOrderType) setOrderType(nextOrderType)
+  }, [])
 
   // ── Single source of truth: absolute index into originalCandlesRef (M1) ──
   // This is STATE so it triggers re-renders. All derived values (price, time) 
@@ -159,9 +169,9 @@ export default function WorkspacePage() {
       if (strat) setStrategy(strat as Strategy)
     }
 
-    const { data: openTrades } = await supabase
-      .from('trades').select('*').eq('session_id', id).eq('status', 'open')
-    setTrades((openTrades as Trade[]) ?? [])
+    const { data: activeTrades } = await supabase
+      .from('trades').select('*').eq('session_id', id).in('status', ['open', 'pending'])
+    setTrades((activeTrades as Trade[]) ?? [])
     setLoading(false)
   }
 
@@ -198,24 +208,46 @@ export default function WorkspacePage() {
 
     let updatedTrades = [...tr]
     let deltaBal      = 0
-    for (const candle of slice) {
+    for (let offset = 0; offset < slice.length; offset++) {
+      const candle = slice[offset]
+      const triggerIdx = i + offset + 1
       updatedTrades = updatedTrades.map(trade => {
+        if (trade.status === 'pending') {
+          const entryPrice = checkPendingEntry(trade, candle)
+          if (entryPrice !== null) {
+            return { ...trade, status: 'open' as const, entry_price: entryPrice, opened_at_idx: triggerIdx }
+          }
+          return trade
+        }
         if (trade.status !== 'open') return trade
         const exitPrice = checkSlTp(trade, candle)
         if (exitPrice !== null) {
           const pnl = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
           deltaBal += pnl
-          return { ...trade, status: 'closed' as const, exit_price: exitPrice, pnl, closed_at_idx: end }
+          return { ...trade, status: 'closed' as const, exit_price: exitPrice, pnl, closed_at_idx: triggerIdx }
         }
         return trade
       })
     }
 
-    const justClosed = updatedTrades.filter((t2, i2) => t2.status === 'closed' && tr[i2]?.status === 'open')
-    for (const trade of justClosed) {
-      await supabase.from('trades').update({
-        status: 'closed', exit_price: trade.exit_price, pnl: trade.pnl, closed_at_idx: end,
-      }).eq('id', trade.id)
+    for (const trade of updatedTrades) {
+      const prev = tr.find(t => t.id === trade.id)
+      if (!prev) continue
+      if (
+        prev.status !== trade.status ||
+        prev.opened_at_idx !== trade.opened_at_idx ||
+        prev.closed_at_idx !== trade.closed_at_idx ||
+        prev.exit_price !== trade.exit_price ||
+        prev.pnl !== trade.pnl
+      ) {
+        await supabase.from('trades').update({
+          status: trade.status,
+          opened_at_idx: trade.opened_at_idx,
+          closed_at_idx: trade.closed_at_idx,
+          exit_price: trade.exit_price,
+          pnl: trade.pnl,
+        }).eq('id', trade.id)
+      }
     }
 
     // Advance M1 absolute index by steps × TF_SECONDS worth of M1 candles
@@ -260,28 +292,30 @@ export default function WorkspacePage() {
   }, [id, supabase, accountBreached, timeframe, closeAllOpenTrades])
 
   async function execTrade(side: 'buy' | 'sell') {
-    if (accountBreached) return
+    if (accountBreached) return false
     const c = advanceCandlesRef.current
     const i = advanceIdxRef.current
     const cur = c[i - 1]
-    if (!cur || !session) return
-    // Use real M1 price as entry
+    if (!cur || !session) return false
     const m1Now = originalCandlesRef.current[stateRef.current.m1AbsIdx]
-    const entry = m1Now?.close ?? cur.close
+    const marketEntry = m1Now?.close ?? cur.close
+    const pendingEntry = entryVal ? parseFloat(entryVal) : NaN
+    const entry = orderType === 'pending' && Number.isFinite(pendingEntry) ? pendingEntry : marketEntry
+    if (orderType === 'pending' && !Number.isFinite(pendingEntry)) return false
 
     if (slVal) {
       const sl = parseFloat(slVal)
       if (!isNaN(sl)) {
-        if (side === 'buy'  && sl >= entry) { setSlError('SL must be below entry for a buy'); return }
-        if (side === 'sell' && sl <= entry) { setSlError('SL must be above entry for a sell'); return }
+        if (side === 'buy'  && sl >= entry) { setSlError('SL must be below entry for a buy'); return false }
+        if (side === 'sell' && sl <= entry) { setSlError('SL must be above entry for a sell'); return false }
       }
     }
     setSlError('')
     if (tpVal) {
       const tp = parseFloat(tpVal)
       if (!isNaN(tp)) {
-        if (side === 'buy'  && tp <= entry) { setTpError('TP must be above entry for a buy'); return }
-        if (side === 'sell' && tp >= entry) { setTpError('TP must be below entry for a sell'); return }
+        if (side === 'buy'  && tp <= entry) { setTpError('TP must be above entry for a buy'); return false }
+        if (side === 'sell' && tp >= entry) { setTpError('TP must be below entry for a sell'); return false }
       }
     }
     setTpError('')
@@ -293,9 +327,10 @@ export default function WorkspacePage() {
       quantity:    parseFloat(qty) || 0.1,
       stop_loss:   slVal ? parseFloat(slVal) : null,
       take_profit: tpVal ? parseFloat(tpVal) : null,
-      status: 'open', opened_at_idx: i, weekday: day,
+      status: orderType === 'pending' ? 'pending' : 'open', opened_at_idx: i, weekday: day,
     }).select().single()
     if (data) setTrades(prev => [...prev, data as Trade])
+    return Boolean(data)
   }
 
   async function closeTrade(tradeId: string) {
@@ -305,6 +340,13 @@ export default function WorkspacePage() {
     const cur = c[i - 1]
     const trade = stateRef.current.trades.find(t => t.id === tradeId)
     if (!cur || !trade) return
+    if (trade.status === 'pending') {
+      await supabase.from('trades').update({
+        status: 'closed', pnl: 0, closed_at_idx: i,
+      }).eq('id', tradeId)
+      setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, status: 'closed' as const, pnl: 0, closed_at_idx: i } : t))
+      return
+    }
     const cs       = symRef.current.contractSize
     const m1Now    = originalCandlesRef.current[stateRef.current.m1AbsIdx]
     const exitPrice = m1Now?.close ?? cur.close
@@ -384,8 +426,22 @@ export default function WorkspacePage() {
   const m1Open    = m1Candle?.open   ?? 0
 
   const done     = m1AbsIdx >= m1All.length - 1
-  const openTr   = trades.filter(t => t.status === 'open')
-  const closedTr = trades.filter(t => t.status === 'closed')
+  const { openTr, activeTr, closedTr } = useMemo(() => {
+    const open: Trade[] = []
+    const active: Trade[] = []
+    const closed: Trade[] = []
+    for (const trade of trades) {
+      if (trade.status === 'open') {
+        open.push(trade)
+        active.push(trade)
+      } else if (trade.status === 'pending') {
+        active.push(trade)
+      } else {
+        closed.push(trade)
+      }
+    }
+    return { openTr: open, activeTr: active, closedTr: closed }
+  }, [trades])
   const realizedPnl = parseFloat(closedTr.reduce((a, tr) => a + (tr.pnl ?? 0), 0).toFixed(2))
   const openPnl  = m1Price
     ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize), 0)
@@ -407,6 +463,14 @@ export default function WorkspacePage() {
   }
 
   const dateStr = formatTime(m1Time, timezone)
+  const previewEntryLabel = useMemo(() => {
+    if (!tradeSide) return null
+    if (orderType === 'market') return tradeSide === 'buy' ? 'Buy' : 'Sell'
+    const previewPrice = entryVal ? parseFloat(entryVal) : m1Price
+    if (!Number.isFinite(previewPrice)) return tradeSide === 'buy' ? 'Buy' : 'Sell'
+    if (tradeSide === 'buy') return previewPrice > m1Price ? 'Buy Stop' : 'Buy Limit'
+    return previewPrice > m1Price ? 'Sell Limit' : 'Sell Stop'
+  }, [entryVal, m1Price, orderType, tradeSide])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-primary)'}}>
@@ -683,7 +747,7 @@ export default function WorkspacePage() {
             <WorkspaceChart
               ref={chartHandleRef}
               candles={aggregatedCandles.slice(0, displayIdx)}
-              openTrades={openTr}
+              openTrades={activeTr}
               symbol={sym}
               lastPrice={m1Price || undefined}
               indicatorConfig={indicatorConfig}
@@ -694,6 +758,7 @@ export default function WorkspacePage() {
               previewEntry={tradeSide ? (orderType==='pending' && entryVal ? parseFloat(entryVal) : m1Price) : null}
               previewSL={tradeSide && slVal ? parseFloat(slVal) || null : null}
               previewTP={tradeSide && tpVal ? parseFloat(tpVal) || null : null}
+              previewEntryLabel={previewEntryLabel}
               onPreviewSL={price => setSlVal(parseFloat(price.toFixed(sym.decimals)).toString())}
               onPreviewTP={price => setTpVal(parseFloat(price.toFixed(sym.decimals)).toString())}
               onPreviewEntry={price => setEntryVal(parseFloat(price.toFixed(sym.decimals)).toString())}
@@ -749,12 +814,12 @@ export default function WorkspacePage() {
           {/* Trades table */}
           <div className="h-48 flex flex-col shrink-0" style={{borderTop:'1px solid var(--border-subtle)'}}>
             <TabBar
-              tabs={[{key:'open', label:`${t('openPositions')} (${openTr.length})`}, {key:'closed', label:`${t('closedTrades')} (${closedTr.length})`}]}
+              tabs={[{key:'open', label:`${t('openPositions')} (${activeTr.length})`}, {key:'closed', label:`${t('closedTrades')} (${closedTr.length})`}]}
               active={tradeTab} onChange={setTradeTab}
             />
             <div className="flex-1 overflow-y-auto text-xs">
               {tradeTab === 'open' ? (
-                openTr.length === 0
+                activeTr.length === 0
                   ? <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noOpenTrades')}</div>
                   : <table className="w-full">
                       <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
@@ -763,11 +828,11 @@ export default function WorkspacePage() {
                         ))}</tr>
                       </thead>
                       <tbody>
-                        {openTr.map(tr => {
-                          const upnl = m1Price ? calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize) : 0
+                        {activeTr.map(tr => {
+                          const upnl = tr.status === 'open' && m1Price ? calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize) : 0
                           return (
                             <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
-                              <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
+                              <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.status === 'pending' ? `PENDING ${tr.side.toUpperCase()}` : tr.side.toUpperCase()}</Badge></td>
                               <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
                               <td className="px-3 py-2 font-mono">
                                 {tr.stop_loss ? (
@@ -803,13 +868,13 @@ export default function WorkspacePage() {
                               </td>
                               <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
                               <td className="px-3 py-2 font-mono font-semibold" style={{color: upnl>=0?'var(--green)':'var(--red)'}}>
-                                {upnl>=0?'+':''}{upnl.toFixed(2)}
+                                {tr.status === 'pending' ? '—' : `${upnl>=0?'+':''}${upnl.toFixed(2)}`}
                               </td>
                               <td className="px-3 py-2">
                                 <button onClick={() => closeTrade(tr.id)}
                                   className="rounded px-2 py-0.5 text-[10px] transition-colors"
                                   style={{color:'var(--red)', border:'1px solid var(--red-muted)'}}>
-                                  {t('close')}
+                                  {tr.status === 'pending' ? 'Cancel' : t('close')}
                                 </button>
                               </td>
                             </tr>
@@ -862,12 +927,20 @@ export default function WorkspacePage() {
             slError={slError} tpError={tpError}
             entryVal={entryVal} setEntryVal={setEntryVal}
             accountBreached={accountBreached}
-            openTr={openTr}
+            openTr={activeTr}
             openPnl={openPnl}
-            onBuy={() => execTrade('buy')}
-            onSell={() => execTrade('sell')}
+            onBuy={async () => {
+              const success = await execTrade('buy')
+              if (success) resetTradeDraft()
+              return success
+            }}
+            onSell={async () => {
+              const success = await execTrade('sell')
+              if (success) resetTradeDraft()
+              return success
+            }}
             onSideChange={setTradeSide}
-            onOrderTypeChange={setOrderType}
+            onOrderTypeChange={t => resetTradeDraft(t)}
           />
         </div>
       </div>

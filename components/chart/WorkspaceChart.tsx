@@ -31,6 +31,7 @@ interface Props {
   previewTP?:    number | null
   previewEntry?: number | null
   previewSide?:  'buy' | 'sell' | null
+  previewEntryLabel?: string | null
   onPreviewSL?:   (price: number) => void
   onPreviewTP?:   (price: number) => void
   onPreviewEntry?: (price: number) => void
@@ -46,7 +47,7 @@ type DragType = 'sl' | 'tp' | 'entry'
 
 export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceChart(
   { candles, openTrades, symbol, lastPrice: lastPriceProp, onSetSL, onSetTP, onCloseTrade, indicatorConfig,
-    previewSL, previewTP, previewEntry, previewSide, onPreviewSL, onPreviewTP, onPreviewEntry },
+    previewSL, previewTP, previewEntry, previewSide, previewEntryLabel, onPreviewSL, onPreviewTP, onPreviewEntry },
   ref
 ) {
   const containerRef    = useRef<HTMLDivElement>(null)
@@ -58,10 +59,13 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
   const draggingPriceRef= useRef<number | null>(null)
   const { theme }       = useTheme()
   const [cursorStyle, setCursorStyle] = useState('default')
+  const [hideCrosshair, setHideCrosshair] = useState(false)
   const [linePos, setLinePos]         = useState<Map<string, LineYPositions>>(new Map())
   const rafRef          = useRef<number>(0)
+  const syncQueuedRef   = useRef(false)
   const openTradesRef   = useRef<Trade[]>(openTrades)
   const prevPosRef      = useRef<Map<string, LineYPositions>>(new Map())
+  const previewDraggingRef = useRef<'sl' | 'tp' | 'entry' | null>(null)
 
   // Fix 6: temp line shown while dragging from entry line to create SL/TP
   const [dragLine, setDragLine] = useState<{ y: number; isTP: boolean } | null>(null)
@@ -69,6 +73,19 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
   useImperativeHandle(ref, () => ({ chartRef: chartRef }))
 
   useEffect(() => { openTradesRef.current = openTrades }, [openTrades])
+
+  const normalizePreviewPrice = useCallback((kind: 'sl' | 'tp' | 'entry', price: number) => {
+    if (kind === 'entry' || previewEntry == null || !previewSide) return price
+    const minStep = Math.max(1 / Math.pow(10, symbol.decimals), symbol.pipSize)
+    if (kind === 'tp') {
+      return previewSide === 'buy'
+        ? Math.max(price, previewEntry + minStep)
+        : Math.min(price, previewEntry - minStep)
+    }
+    return previewSide === 'buy'
+      ? Math.min(price, previewEntry - minStep)
+      : Math.max(price, previewEntry + minStep)
+  }, [previewEntry, previewSide, symbol.decimals, symbol.pipSize])
 
   const getColors = useCallback(() => {
     const d = theme === 'dark'
@@ -116,6 +133,16 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
     }
   }, [])
 
+  const scheduleSyncPositions = useCallback(() => {
+    if (syncQueuedRef.current) return
+    syncQueuedRef.current = true
+    cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      syncQueuedRef.current = false
+      syncPositions()
+    })
+  }, [syncPositions])
+
   // ── Initialize chart ─────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || initializedRef.current) return
@@ -136,9 +163,11 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
           crosshair: {
             mode: lc.CrosshairMode.Normal,
             vertLine: {
+              visible: true,
               labelVisible: true,
             },
             horzLine: {
+              visible: true,
               labelVisible: true,
             },
           },
@@ -184,11 +213,8 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         chartRef.current  = chart
         seriesRef.current = series
 
-        chart.subscribeCrosshairMove(syncPositions)
-        chart.timeScale().subscribeVisibleTimeRangeChange(syncPositions)
-
-        const loop = () => { syncPositions(); rafRef.current = requestAnimationFrame(loop) }
-        rafRef.current = requestAnimationFrame(loop)
+        chart.subscribeCrosshairMove(scheduleSyncPositions)
+        chart.timeScale().subscribeVisibleTimeRangeChange(scheduleSyncPositions)
 
         const el = containerRef.current!
 
@@ -210,6 +236,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
               setCursorStyle('ns-resize')
               e.stopPropagation()
               e.preventDefault()
+              scheduleSyncPositions()
               // Disable chart panning while we drag
               chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
               return
@@ -231,6 +258,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
               setCursorStyle('ns-resize')
               e.stopPropagation()
               e.preventDefault()
+              scheduleSyncPositions()
               chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
               return
             }
@@ -240,6 +268,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         const onMouseMove = (e: MouseEvent) => {
           ;(window as any).__lastMouseY = e.clientY
           if (!draggingRef.current || !seriesRef.current) return
+          setHideCrosshair(true)
           const rect     = el.getBoundingClientRect()
           const y        = e.clientY - rect.top
           const newPrice = seriesRef.current.coordinateToPrice(y)
@@ -252,6 +281,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
             draggingPriceRef.current = newPrice
             const line = priceLines.current.get(`${tradeId}:${type}`)
             if (line) line.applyOptions({ price: newPrice })
+            scheduleSyncPositions()
           } else if (type === 'entry') {
             // Fix 6: show temp line indicating where SL/TP will be set
             draggingPriceRef.current = newPrice
@@ -263,6 +293,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
               const isTP = (isBuy && isAbove) || (!isBuy && !isAbove)
               setDragLine({ y, isTP })
             }
+            scheduleSyncPositions()
           }
         }
 
@@ -299,6 +330,8 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
           draggingPriceRef.current = null
           setDragLine(null)
           setCursorStyle('default')
+          setHideCrosshair(false)
+          scheduleSyncPositions()
         }
 
         // Fix 2: capture:true so we intercept before lightweight-charts handles it
@@ -345,7 +378,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       draggingRef.current    = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [getColors, scheduleSyncPositions])
 
   // ── Theme ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -356,8 +389,12 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       grid:            { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { borderColor: c.border },
       timeScale:       { borderColor: c.border },
+      crosshair:       {
+        vertLine: { visible: !hideCrosshair, labelVisible: !hideCrosshair },
+        horzLine: { visible: !hideCrosshair, labelVisible: !hideCrosshair },
+      },
     })
-  }, [theme, getColors])
+  }, [theme, getColors, hideCrosshair])
 
   // ── Candles ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -365,7 +402,8 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
     seriesRef.current.setData(
       candles.map(c => ({ time: c.time as any, open: c.open, high: c.high, low: c.low, close: c.close }))
     )
-  }, [candles])
+    scheduleSyncPositions()
+  }, [candles, scheduleSyncPositions])
 
   // ── Price lines ──────────────────────────────────────────────────
   useEffect(() => {
@@ -385,7 +423,7 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
             price: tr.entry_price,
             color: entryColor,
             lineWidth: 2, lineStyle: LineStyle.Solid,
-            axisLabelVisible: true, title: tr.side === 'buy' ? '▲ Entry' : '▼ Entry',
+            axisLabelVisible: true, title: tr.side === 'buy' ? '▲ Buy' : '▼ Sell',
           }))
         } catch {}
 
@@ -411,9 +449,9 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
           } catch {}
         }
       })
-      syncPositions()
+      scheduleSyncPositions()
     })
-  }, [openTrades, syncPositions])
+  }, [openTrades, scheduleSyncPositions])
   // ── Live M1 price line — stable across TF switches ───────────────
   const m1PriceLineRef = useRef<any>(null)
   useEffect(() => {
@@ -435,48 +473,62 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
         }
       } catch {}
     })
-  }, [lastPriceProp])
+    scheduleSyncPositions()
+  }, [lastPriceProp, scheduleSyncPositions])
 
   // ── Cursor: change to ns-resize when hovering near any draggable line ──
   useEffect(() => {
     if (!containerRef.current) return
     const el = containerRef.current
+    const isNearPriceLine = (y: number) => {
+      if (!seriesRef.current) return false
+      for (const tr of openTrades) {
+        const entryY = seriesRef.current.priceToCoordinate(tr.entry_price)
+        if (entryY != null && Math.abs(entryY - y) < 10) return true
+      }
+      for (const [key] of priceLines.current) {
+        const [tradeId, type] = key.split(':')
+        if (type === 'entry') continue
+        const trade = openTrades.find(t => t.id === tradeId)
+        if (!trade) continue
+        const price = type === 'sl' ? trade.stop_loss : trade.take_profit
+        if (!price) continue
+        const ly = seriesRef.current.priceToCoordinate(price)
+        if (ly != null && Math.abs(ly - y) < 10) return true
+      }
+      const previewPrices = [previewEntry, previewSL, previewTP]
+      for (const price of previewPrices) {
+        if (price == null) continue
+        const ly = seriesRef.current.priceToCoordinate(price)
+        if (ly != null && Math.abs(ly - y) < 10) return true
+      }
+      return false
+    }
     const onMove = (e: MouseEvent) => {
-      if (draggingRef.current || !seriesRef.current) return
-      // If mouse is over the overlay widgets (not the chart canvas itself), show default
-      if (e.target !== el && !(e.target as HTMLElement).closest('canvas')) {
-        setCursorStyle('default')
+      if (!seriesRef.current) return
+      if (draggingRef.current || previewDraggingRef.current) {
+        setCursorStyle('ns-resize')
+        setHideCrosshair(true)
         return
       }
       const rect = el.getBoundingClientRect()
       const y    = e.clientY - rect.top
-      let near   = false
-
-      // Check entry lines
-      for (const tr of openTrades) {
-        const entryY = seriesRef.current.priceToCoordinate(tr.entry_price)
-        if (entryY != null && Math.abs(entryY - y) < 10) { near = true; break }
-      }
-
-      // Check SL/TP lines
-      if (!near) {
-        for (const [key] of priceLines.current) {
-          const [tradeId, type] = key.split(':')
-          if (type === 'entry') continue
-          const trade = openTrades.find(t => t.id === tradeId)
-          if (!trade) continue
-          const price = type === 'sl' ? trade.stop_loss : trade.take_profit
-          if (!price) continue
-          const ly = seriesRef.current.priceToCoordinate(price)
-          if (ly != null && Math.abs(ly - y) < 10) { near = true; break }
-        }
-      }
-
+      const near   = isNearPriceLine(y)
       setCursorStyle(near ? 'ns-resize' : 'default')
+      setHideCrosshair(near)
+    }
+    const onLeave = () => {
+      if (draggingRef.current || previewDraggingRef.current) return
+      setCursorStyle('default')
+      setHideCrosshair(false)
     }
     el.addEventListener('mousemove', onMove)
-    return () => el.removeEventListener('mousemove', onMove)
-  }, [openTrades])
+    el.addEventListener('mouseleave', onLeave)
+    return () => {
+      el.removeEventListener('mousemove', onMove)
+      el.removeEventListener('mouseleave', onLeave)
+    }
+  }, [openTrades, previewEntry, previewSL, previewTP])
 
 
 
@@ -491,16 +543,21 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       const pl = previewLinesRef.current
       const upsert = (key: 'sl' | 'tp' | 'entry', price: number | null | undefined, color: string) => {
         if (price != null && price > 0) {
+          const entryTitle = previewEntryLabel
+            ? `${previewSide === 'buy' ? '▲' : '▼'} ${previewEntryLabel}`
+            : (previewSide === 'buy' ? '▲ Buy' : '▼ Sell')
+          const title = key === 'entry' ? entryTitle : key === 'sl' ? '✕ SL' : '✓ TP'
           if (pl[key]) { pl[key].applyOptions({ price }) }
           else {
             try {
               pl[key] = seriesRef.current.createPriceLine({
                 price, color, lineWidth: 1, lineStyle: LineStyle.Dashed,
                 axisLabelVisible: true,
-                title: key === 'entry' ? (previewSide === 'buy' ? '▲ Entry' : '▼ Entry') : key === 'sl' ? '✕ SL' : '✓ TP',
+                title,
               })
             } catch {}
           }
+          if (pl[key]) pl[key].applyOptions({ color, title })
         } else if (pl[key]) {
           try { seriesRef.current?.removePriceLine(pl[key]) } catch {}
           pl[key] = null
@@ -511,19 +568,12 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       upsert('sl',    previewSL,    TV_SL + 'cc')
       upsert('tp',    previewTP,    TV_TP + 'cc')
     })
-  }, [previewSL, previewTP, previewEntry, previewSide])
+  }, [previewSL, previewTP, previewEntry, previewSide, previewEntryLabel])
 
   // Drag preview SL/TP/Entry lines on chart to update form inputs
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    let dragging: 'sl' | 'tp' | 'entry' | null = null
-
-    const hitY = (price: number | null | undefined) => {
-      if (price == null || !seriesRef.current) return false
-      const coord = seriesRef.current.priceToCoordinate(price)
-      return coord != null ? (y: number) => Math.abs(coord - y) < 10 : () => false
-    }
 
     const onDown = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('button')) return
@@ -533,31 +583,55 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
       const slCoord    = previewSL    != null ? seriesRef.current.priceToCoordinate(previewSL)    : null
       const tpCoord    = previewTP    != null ? seriesRef.current.priceToCoordinate(previewTP)    : null
       const entryCoord = previewEntry != null ? seriesRef.current.priceToCoordinate(previewEntry) : null
-      if (slCoord    != null && Math.abs(slCoord    - y) < 12) { dragging = 'sl';    e.preventDefault(); e.stopPropagation() }
-      else if (tpCoord    != null && Math.abs(tpCoord    - y) < 12) { dragging = 'tp';    e.preventDefault(); e.stopPropagation() }
-      else if (entryCoord != null && Math.abs(entryCoord - y) < 12) { dragging = 'entry'; e.preventDefault(); e.stopPropagation() }
+      if (slCoord != null && Math.abs(slCoord - y) < 12) {
+        previewDraggingRef.current = 'sl'
+        setCursorStyle('ns-resize')
+        e.preventDefault()
+        e.stopPropagation()
+        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
+      } else if (tpCoord != null && Math.abs(tpCoord - y) < 12) {
+        previewDraggingRef.current = 'tp'
+        setCursorStyle('ns-resize')
+        e.preventDefault()
+        e.stopPropagation()
+        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
+      } else if (entryCoord != null && Math.abs(entryCoord - y) < 12) {
+        previewDraggingRef.current = 'entry'
+        setCursorStyle('ns-resize')
+        e.preventDefault()
+        e.stopPropagation()
+        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
+      }
     }
     const onMove = (e: MouseEvent) => {
+      const dragging = previewDraggingRef.current
       if (!dragging || !seriesRef.current) return
       e.preventDefault()
+      setHideCrosshair(true)
       const rect  = el.getBoundingClientRect()
       const price = seriesRef.current.coordinateToPrice(e.clientY - rect.top)
       if (price == null) return
-      if (dragging === 'sl')    onPreviewSL?.   (price)
-      if (dragging === 'tp')    onPreviewTP?.   (price)
+      const normalizedPrice = normalizePreviewPrice(dragging, price)
+      if (dragging === 'sl')    onPreviewSL?.   (normalizedPrice)
+      if (dragging === 'tp')    onPreviewTP?.   (normalizedPrice)
       if (dragging === 'entry') onPreviewEntry?.(price)
     }
-    const onUp = () => { dragging = null }
+    const onUp = () => {
+      previewDraggingRef.current = null
+      setCursorStyle('default')
+      setHideCrosshair(false)
+      chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true } })
+    }
 
-    el.addEventListener('mousedown', onDown)
+    el.addEventListener('mousedown', onDown, { capture: true })
     window.addEventListener('mousemove', onMove, { passive: false })
     window.addEventListener('mouseup',   onUp)
     return () => {
-      el.removeEventListener('mousedown', onDown)
+      el.removeEventListener('mousedown', onDown, true)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup',   onUp)
     }
-  }, [previewSL, previewTP, previewEntry, onPreviewSL, onPreviewTP, onPreviewEntry])
+  }, [normalizePreviewPrice, previewSL, previewTP, previewEntry, onPreviewSL, onPreviewTP, onPreviewEntry])
 
   // ── Overlay indicator series ──────────────────────────────────────
   const overlaySeriesRef = useRef<Map<string,any>>(new Map())
@@ -642,7 +716,9 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
           const pos = linePos.get(trade.id)
           if (!pos) return null
 
-          const unrealizedPnl = calcPnl(trade.side, trade.entry_price, lastPrice, trade.quantity, symbol.contractSize)
+          const unrealizedPnl = trade.status === 'open'
+            ? calcPnl(trade.side, trade.entry_price, lastPrice, trade.quantity, symbol.contractSize)
+            : 0
           const isBuy         = trade.side === 'buy'
           const entryColor    = isBuy ? TV_ENTRY_BUY : TV_ENTRY_SELL
 
@@ -672,8 +748,8 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
                     <TvPillBtn label="TP" onClick={() => onSetTP?.(trade.id, lastPrice + (isBuy ? 5 : -5))} />
                     <TvPillBtn label="SL" onClick={() => onSetSL?.(trade.id, lastPrice + (isBuy ? -5 : 5))} />
                     <span style={{ opacity: 0.9 }}>{isBuy ? '+' : '−'}{trade.quantity}</span>
-                    <span style={{ color: unrealizedPnl >= 0 ? '#bbf7d0' : '#fecaca', fontWeight: 700, margin: '0 2px' }}>
-                      {unrealizedPnl >= 0 ? '+' : ''}{unrealizedPnl.toFixed(2)} USD
+                    <span style={{ color: trade.status === 'pending' ? 'rgba(255,255,255,0.8)' : unrealizedPnl >= 0 ? '#bbf7d0' : '#fecaca', fontWeight: 700, margin: '0 2px' }}>
+                      {trade.status === 'pending' ? 'Pending' : `${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} USD`}
                     </span>
                     <TvCloseBtn onClick={() => onCloseTrade?.(trade.id)} />
                   </div>
@@ -753,8 +829,10 @@ function LineWidget({ top, children }: { top: number; children: React.ReactNode 
 function TvPillBtn({ label, onClick }: { label: string; onClick?: () => void }) {
   return (
     <button
-      onClick={e => { e.stopPropagation(); onClick?.() }}
-      onMouseDown={e => e.stopPropagation()}
+      type="button"
+      onClick={e => { e.preventDefault(); e.stopPropagation(); onClick?.() }}
+      onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+      onPointerDown={e => { e.preventDefault(); e.stopPropagation() }}
       style={{
       background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 2,
       color: '#fff', fontSize: 10, fontWeight: 700,
@@ -768,8 +846,10 @@ function TvPillBtn({ label, onClick }: { label: string; onClick?: () => void }) 
 function TvCloseBtn({ onClick }: { onClick?: () => void }) {
   return (
     <button
-      onClick={e => { e.stopPropagation(); onClick?.() }}
-      onMouseDown={e => e.stopPropagation()}
+      type="button"
+      onClick={e => { e.preventDefault(); e.stopPropagation(); onClick?.() }}
+      onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+      onPointerDown={e => { e.preventDefault(); e.stopPropagation() }}
       style={{
       background: 'rgba(0,0,0,0.22)', border: 'none', borderRadius: 2,
       color: 'rgba(255,255,255,0.9)', fontSize: 15, fontWeight: 300,

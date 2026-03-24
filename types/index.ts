@@ -4,8 +4,36 @@ export interface Profile {
   id: string
   display_name: string | null
   language: 'en' | 'ru' | 'uz'
+  subscription_status: 'inactive' | 'active' | 'canceled'
+  subscription_plan: string
+  subscription_price: number
+  payment_method: 'humo' | 'uzcard' | 'visa' | null
+  card_holder_name: string | null
+  card_last4: string | null
+  card_exp_month: number | null
+  card_exp_year: number | null
+  payment_authorized_at: string | null
+  subscription_started_at: string | null
+  subscription_expires_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SubscriptionTransaction {
+  id: string
+  user_id: string
+  amount: number
+  currency: string
+  payment_method: 'humo' | 'uzcard' | 'visa'
+  card_last4: string
+  card_holder_name: string | null
+  card_exp_month: number | null
+  card_exp_year: number | null
+  provider_card_id: string | null
+  provider_card_token: string | null
+  status: 'pending' | 'authorized' | 'failed' | 'canceled'
+  reference: string
+  created_at: string
 }
 
 export interface Strategy {
@@ -45,7 +73,7 @@ export interface Trade {
   stop_loss: number | null
   take_profit: number | null
   pnl: number | null
-  status: 'open' | 'closed'
+  status: 'open' | 'pending' | 'closed'
   opened_at_idx: number
   closed_at_idx: number | null
   weekday: string | null

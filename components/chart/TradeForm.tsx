@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { Trade, Symbol } from '@/types'
 import { calcPnl, fmtPrice } from '@/lib/utils'
 
@@ -22,8 +22,8 @@ interface Props {
   accountBreached: boolean
   openTr:          Trade[]
   openPnl:         number
-  onBuy:           () => void
-  onSell:          () => void
+  onBuy:           () => Promise<boolean> | boolean
+  onSell:          () => Promise<boolean> | boolean
   onSideChange?:   (side: 'buy' | 'sell' | null) => void
   onOrderTypeChange?: (t: 'market' | 'pending') => void
 }
@@ -31,6 +31,7 @@ interface Props {
 type OrderType = 'market' | 'pending'
 
 const STEP = 0.5
+const INITIAL_PROTECTIVE_OFFSET = 1
 
 export function TradeForm({
   symbol, sellPrice, buyPrice, balance,
@@ -44,6 +45,12 @@ export function TradeForm({
 
   const setSide = (s: 'buy' | 'sell' | null) => { setActiveSide(s); onSideChange?.(s) }
   const switchOrder = (t: OrderType) => { setOrderType(t); onOrderTypeChange?.(t) }
+  const resetDraftFields = () => {
+    setQty('0.10')
+    setSlVal('')
+    setTpVal('')
+    setEntryVal('')
+  }
 
   const marketPrice = activeSide === 'sell' ? sellPrice : buyPrice
   // For pending, use entryVal if set, else market price
@@ -92,12 +99,44 @@ export function TradeForm({
 
   const adjustQty    = (d: number) => setQty(Math.max(0.01, (parseFloat(qty)||0.01)+d).toFixed(2))
   const adjustEntry  = (d: number) => setEntryVal(((parseFloat(entryVal)||marketPrice)+d).toFixed(dec))
-  const adjustSL     = (d: number) => setSlVal(((slNum??entryNum)+d).toFixed(dec))
-  const adjustTP     = (d: number) => setTpVal(((tpNum??entryNum)+d).toFixed(dec))
+  const getFirstProtectivePrice = (kind: 'sl' | 'tp') => {
+    const dir = (
+      (side === 'buy'  && kind === 'tp') ||
+      (side === 'sell' && kind === 'sl')
+    ) ? 1 : -1
+    return entryNum + dir * INITIAL_PROTECTIVE_OFFSET
+  }
+  const isValidProtectivePrice = (kind: 'sl' | 'tp', price: number) => {
+    if (kind === 'tp') return side === 'buy' ? price > entryNum : price < entryNum
+    return side === 'buy' ? price < entryNum : price > entryNum
+  }
+  const getProtectiveStep = (kind: 'sl' | 'tp', action: 'plus' | 'minus') => {
+    const awayFromEntry = (
+      (side === 'buy'  && kind === 'tp') ||
+      (side === 'sell' && kind === 'sl')
+    ) ? STEP : -STEP
+    return action === 'plus' ? awayFromEntry : -awayFromEntry
+  }
+  const adjustProtective = (kind: 'sl' | 'tp', current: number | null, action: 'plus' | 'minus', setValue: (v: string) => void) => {
+    const next = current == null || !isValidProtectivePrice(kind, current)
+      ? getFirstProtectivePrice(kind)
+      : current + getProtectiveStep(kind, action)
+    setValue(next.toFixed(dec))
+  }
+  const adjustSL = (action: 'plus' | 'minus') => adjustProtective('sl', slNum, action, setSlVal)
+  const adjustTP = (action: 'plus' | 'minus') => adjustProtective('tp', tpNum, action, setTpVal)
 
-  const handleConfirm = () => {
-    if (activeSide === 'buy')  onBuy()
-    if (activeSide === 'sell') onSell()
+  const entryFieldLabel = orderType === 'pending' ? 'Open Price' : 'Order Price'
+  const entryFieldSuffix = orderType === 'pending'
+    ? (pendingLabel ?? 'Price')
+    : activeSide ? activeSide[0].toUpperCase() + activeSide.slice(1) : 'Price'
+
+  const handleConfirm = async () => {
+    let success = false
+    if (activeSide === 'buy')  success = await onBuy()
+    if (activeSide === 'sell') success = await onSell()
+    if (!success) return
+    resetDraftFields()
     setSide(null)
   }
 
@@ -106,16 +145,15 @@ export function TradeForm({
 
       {/* ── Sell / Buy cards ── */}
       <div style={{ display:'flex', position:'relative', gap: 6, padding: '10px 12px 0' }}>
-        {/* Sell */}
-        <button onClick={() => setSide(activeSide === 'sell' ? null : 'sell')} style={{
+        <button onClick={() => setSide(activeSide === 'buy' ? null : 'buy')} style={{
           flex: 1, padding: '10px 10px 10px', textAlign: 'left',
           borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
-          border: activeSide === 'sell' ? '2px solid var(--red)' : '2px solid var(--border-default)',
-          background: activeSide === 'sell' ? 'rgba(239,68,68,0.14)' : 'var(--bg-tertiary)',
+          border: activeSide === 'buy' ? '2px solid var(--accent)' : '2px solid var(--border-default)',
+          background: activeSide === 'buy' ? 'rgba(59,130,246,0.14)' : 'var(--bg-tertiary)',
         }}>
-          <p style={{ fontSize: 10, color: activeSide === 'sell' ? 'var(--red)' : 'var(--text-muted)', fontWeight: 700, marginBottom: 3, textTransform:'uppercase', letterSpacing:'0.05em' }}>Sell</p>
-          <p style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace', color: 'var(--red)' }}>
-            {sellPrice ? fmtPrice(sellPrice, dec) : '—'}
+          <p style={{ fontSize: 10, color: activeSide === 'buy' ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 700, marginBottom: 3, textTransform:'uppercase', letterSpacing:'0.05em' }}>Buy</p>
+          <p style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace', color: 'var(--accent)' }}>
+            {buyPrice ? fmtPrice(buyPrice, dec) : '—'}
           </p>
         </button>
 
@@ -129,16 +167,16 @@ export function TradeForm({
           {pipSize > 0 ? ((buyPrice-sellPrice)/pipSize).toFixed(1) : '0'} USD
         </div>
 
-        {/* Buy */}
-        <button onClick={() => setSide(activeSide === 'buy' ? null : 'buy')} style={{
+        {/* Sell */}
+        <button onClick={() => setSide(activeSide === 'sell' ? null : 'sell')} style={{
           flex: 1, padding: '10px 10px 10px', textAlign: 'right',
           borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
-          border: activeSide === 'buy' ? '2px solid var(--accent)' : '2px solid var(--border-default)',
-          background: activeSide === 'buy' ? 'rgba(59,130,246,0.14)' : 'var(--bg-tertiary)',
+          border: activeSide === 'sell' ? '2px solid var(--red)' : '2px solid var(--border-default)',
+          background: activeSide === 'sell' ? 'rgba(239,68,68,0.14)' : 'var(--bg-tertiary)',
         }}>
-          <p style={{ fontSize: 10, color: activeSide === 'buy' ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 700, marginBottom: 3, textTransform:'uppercase', letterSpacing:'0.05em' }}>Buy</p>
-          <p style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace', color: 'var(--accent)' }}>
-            {buyPrice ? fmtPrice(buyPrice, dec) : '—'}
+          <p style={{ fontSize: 10, color: activeSide === 'sell' ? 'var(--red)' : 'var(--text-muted)', fontWeight: 700, marginBottom: 3, textTransform:'uppercase', letterSpacing:'0.05em' }}>Sell</p>
+          <p style={{ fontSize: 14, fontWeight: 800, fontFamily: 'monospace', color: 'var(--red)' }}>
+            {sellPrice ? fmtPrice(sellPrice, dec) : '—'}
           </p>
         </button>
       </div>
@@ -149,7 +187,10 @@ export function TradeForm({
         {/* Market / Pending toggle */}
         <div style={{ display:'flex', background:'var(--bg-tertiary)', borderRadius:8, padding:3, marginBottom:14 }}>
           {(['market','pending'] as OrderType[]).map(t => (
-            <button key={t} onClick={() => switchOrder(t)} style={{
+            <button key={t} onClick={() => {
+              resetDraftFields()
+              switchOrder(t)
+            }} style={{
               flex:1, padding:'6px', borderRadius:6, border:'none', cursor:'pointer',
               fontSize:12, fontWeight:600, transition:'all 0.15s',
               background: orderType===t ? 'var(--bg-secondary)' : 'transparent',
@@ -163,7 +204,7 @@ export function TradeForm({
         {orderType === 'pending' && (
           <>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-              <FieldLabel>Open Price</FieldLabel>
+              <FieldLabel>{entryFieldLabel}</FieldLabel>
               {pendingLabel && (
                 <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:4,
                   background: side==='buy'?'rgba(59,130,246,0.12)':'rgba(239,68,68,0.12)',
@@ -176,7 +217,7 @@ export function TradeForm({
               value={entryVal}
               onChange={setEntryVal}
               placeholder={fmtPrice(marketPrice, dec)}
-              suffix="Price"
+              suffix={entryFieldSuffix}
               onClear={entryVal ? () => setEntryVal('') : undefined}
               onMinus={() => adjustEntry(-STEP)}
               onPlus={() => adjustEntry(STEP)}
@@ -198,7 +239,7 @@ export function TradeForm({
         <PriceField
           value={tpVal} onChange={setTpVal} placeholder="Not set" suffix="Price"
           onClear={tpVal ? () => setTpVal('') : undefined}
-          onMinus={() => adjustTP(-STEP)} onPlus={() => adjustTP(STEP)}
+          onMinus={() => adjustTP('minus')} onPlus={() => adjustTP('plus')}
           error={tpError} color={tpColor}
         />
         {tpNum != null && tpUsd != null && (
@@ -214,7 +255,7 @@ export function TradeForm({
         <PriceField
           value={slVal} onChange={setSlVal} placeholder="Not set" suffix="Price"
           onClear={slVal ? () => setSlVal('') : undefined}
-          onMinus={() => adjustSL(-STEP)} onPlus={() => adjustSL(STEP)}
+          onMinus={() => adjustSL('minus')} onPlus={() => adjustSL('plus')}
           error={slError} color={slColor}
         />
         {slNum != null && slUsd != null && (
