@@ -23,9 +23,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="animate-fade-in">
-      <h1 className="font-black text-2xl tracking-tight text-center mb-1" style={{color:'var(--text-primary)'}}>{t('login')}</h1>
-      <p className="text-center text-sm mb-7" style={{color:'var(--text-muted)'}}>
+    <div className="animate-fade-in w-full max-w-md mx-auto">
+      <h1 className="font-black text-2xl tracking-tight text-left mb-1" style={{color:'var(--text-primary)'}}>{t('login')}</h1>
+      <p className="text-left text-sm mb-7" style={{color:'var(--text-muted)'}}>
         {t('noAccount')}{' '}
         <Link href="/auth/register" style={{color:'var(--accent)'}}>{t('register')}</Link>
       </p>

@@ -30,9 +30,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="animate-fade-in">
-      <h1 className="font-black text-2xl tracking-tight text-center mb-1" style={{color:'var(--text-primary)'}}>{t('register')}</h1>
-      <p className="text-center text-sm mb-7" style={{color:'var(--text-muted)'}}>
+    <div className="animate-fade-in w-full max-w-md mx-auto">
+      <h1 className="font-black text-2xl tracking-tight text-left mb-1" style={{color:'var(--text-primary)'}}>{t('register')}</h1>
+      <p className="text-left text-sm mb-7" style={{color:'var(--text-muted)'}}>
         {t('alreadyHaveAccount')}{' '}
         <Link href="/auth/login" style={{color:'var(--accent)'}}>{t('login')}</Link>
       </p>
