@@ -1,0 +1,1005 @@
+'use client'
+
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { useLang } from '@/contexts/LangContext'
+import type { Session, Trade, Candle, Symbol, Strategy } from '@/types'
+import type { TimeFrame } from '@/lib/loadCsvData'
+import { getSymbol } from '@/data/symbols'
+import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
+import { calcPnl, checkPendingEntry, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
+import { Spinner, Badge, TabBar } from '@/components/ui'
+import { WorkspaceChart, type ChartHandle } from '@/components/chart/WorkspaceChart'
+import { TradeForm } from '@/components/chart/TradeForm'
+import { IndicatorPanes, DEFAULT_INDICATOR_CONFIG, type IndicatorConfig } from '@/components/chart/IndicatorPanes'
+
+const SKIP_OPTIONS = [3, 5, 10, 15, 30, 60, 120, 240]
+const WEEKDAYS     = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+const TIMEFRAMES: TimeFrame[] = ['m1', 'm5', 'm15', 'm30', 'h1', 'h4', 'd1', 'w1', 'M1']
+const TIMEZONES = [
+  { value: 'UTC',  label: 'UTC',          offset: 0  },
+  { value: 'EST',  label: 'EST (NYC)',     offset: -5 },
+  { value: 'EDT',  label: 'EDT (NYC)',     offset: -4 },
+  { value: 'GMT',  label: 'GMT (London)',  offset: 0  },
+  { value: 'BST',  label: 'BST (London)', offset: 1  },
+  { value: 'CET',  label: 'CET (Europe)', offset: 1  },
+  { value: 'CEST', label: 'CEST (Europe)',offset: 2  },
+  { value: 'JST',  label: 'JST (Tokyo)',  offset: 9  },
+  { value: 'AEDT', label: 'AEDT (Sydney)',offset: 11 },
+]
+
+const TF_SECONDS: Record<TimeFrame, number> = {
+  m1: 60, m5: 300, m15: 900, m30: 1800,
+  h1: 3600, h4: 14400, d1: 86400, w1: 604800, M1: 2592000,
+}
+
+export default function WorkspacePage() {
+  const params   = useParams()
+  const id       = params.id as string
+  const router   = useRouter()
+  const { user } = useAuth()
+  const { t }    = useLang()
+  const supabase = createClient()
+
+  const [session,         setSession]         = useState<Session | null>(null)
+  const [strategy,        setStrategy]        = useState<Strategy | null>(null)
+  const [checkOpen,       setCheckOpen]       = useState(false)
+  const [checkedItems,    setCheckedItems]    = useState<Record<number, boolean>>({})
+  // m1Loaded triggers recompute of aggregatedCandles when data arrives
+  const [m1Loaded,        setM1Loaded]        = useState(false)
+  const [trades,          setTrades]          = useState<Trade[]>([])
+  const [balance,         setBalance]         = useState(0)
+  const [skipVal,         setSkipVal]         = useState(5)
+  const [tradeTab,        setTradeTab]        = useState('open')
+  const [loading,         setLoading]         = useState(true)
+  const [qty,             setQty]             = useState('0.10')
+  const [slVal,           setSlVal]           = useState('')
+  const [tpVal,           setTpVal]           = useState('')
+  const [timeframe,       setTimeframe]       = useState<TimeFrame>('m1')
+  const [timezone,        setTimezone]        = useState('UTC')
+  const [accountBreached, setAccountBreached] = useState(false)
+  const [slError,         setSlError]         = useState('')
+  const [tpError,         setTpError]         = useState('')
+  const [tradeSide,       setTradeSide]       = useState<'buy'|'sell'|null>(null)
+  const [entryVal,        setEntryVal]        = useState('')
+  const [orderType,       setOrderType]       = useState<'market'|'pending'>('market')
+  const chartHandleRef     = useRef<ChartHandle>(null)
+  const [indicatorConfig, setIndicatorConfig] = useState<IndicatorConfig>(DEFAULT_INDICATOR_CONFIG)
+  const [showIndicators,  setShowIndicators]  = useState(false)
+
+  const resetTradeDraft = useCallback((nextOrderType?: 'market' | 'pending') => {
+    setQty('0.10')
+    setSlVal('')
+    setTpVal('')
+    setEntryVal('')
+    setSlError('')
+    setTpError('')
+    if (nextOrderType) setOrderType(nextOrderType)
+  }, [])
+
+  // ── Single source of truth: absolute index into originalCandlesRef (M1) ──
+  // This is STATE so it triggers re-renders. All derived values (price, time) 
+  // come from this — it never changes when TF switches, only when advancing.
+  const [m1AbsIdx, setM1AbsIdx] = useState(0)
+
+  const originalCandlesRef  = useRef<Candle[]>([])
+  const playableStartIdxRef = useRef<number>(0)
+  const stateRef            = useRef({ trades, balance, m1AbsIdx })
+  const symRef              = useRef<Symbol>(getSymbol('XAUUSD'))
+
+  useEffect(() => {
+    stateRef.current = { trades, balance, m1AbsIdx }
+  }, [trades, balance, m1AbsIdx])
+
+  useEffect(() => { if (user && id) init() }, [user, id])
+
+  // Aggregated candles — recomputed only when timeframe or data changes (NOT on every advance)
+  const aggregatedCandles = useMemo(() => {
+    if (!m1Loaded || !originalCandlesRef.current.length) return []
+    return aggregateCandles(originalCandlesRef.current, timeframe)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeframe, m1Loaded])
+
+  // Display idx — O(n) scan, but only over aggregated array
+  const displayIdx = useMemo(() => {
+    if (!aggregatedCandles.length) return 0
+    const curM1Ts = originalCandlesRef.current[m1AbsIdx]?.time ?? 0
+    let newIdx = Math.max(1, playableStartIdxRef.current)
+    for (let i = 0; i < aggregatedCandles.length; i++) {
+      if (aggregatedCandles[i].time <= curM1Ts) newIdx = i + 1
+      else break
+    }
+    return Math.min(newIdx, aggregatedCandles.length)
+  }, [aggregatedCandles, m1AbsIdx])
+
+  async function init() {
+    const { data: sess } = await supabase.from('sessions').select('*').eq('id', id).single()
+    if (!sess) { router.push('/dashboard/sessions'); return }
+    const s = sess as Session
+    setSession(s)
+    setBalance(s.end_capital)
+    symRef.current = getSymbol(s.symbol)
+
+    let m1: Candle[]
+    try { m1 = await loadXauUsdData() }
+    catch {
+      const { data: cache } = await supabase.from('candle_cache').select('candles').eq('session_id', id).single()
+      m1 = (cache?.candles as Candle[]) ?? []
+    }
+    if (!m1.length) {
+      alert('Failed to load chart data.')
+      router.push('/dashboard/sessions'); return
+    }
+
+    const startTs    = Math.floor(new Date(s.start_date).getTime() / 1000)
+    const endTs      = Math.floor(new Date(s.end_date).getTime()   / 1000) + 86400
+    const allUpToEnd = m1.filter(c => c.time <= endTs)
+    if (!allUpToEnd.length) {
+      alert('No candles found for the selected date range.')
+      router.push('/dashboard/sessions'); return
+    }
+
+    let playableStart = allUpToEnd.findIndex(c => c.time >= startTs)
+    if (playableStart < 0) playableStart = allUpToEnd.length
+
+    originalCandlesRef.current  = allUpToEnd
+    playableStartIdxRef.current = playableStart
+
+    // Restore saved absolute M1 index
+    let savedM1Abs = playableStart
+    if (s.candle_index > playableStart) {
+      // New format: already absolute
+      savedM1Abs = Math.min(s.candle_index, allUpToEnd.length - 1)
+    } else if (s.candle_index > 0) {
+      // Legacy format: relative count
+      savedM1Abs = Math.min(playableStart + s.candle_index, allUpToEnd.length - 1)
+    }
+
+    setM1AbsIdx(savedM1Abs)
+    setM1Loaded(true)  // triggers aggregatedCandles recompute
+
+    // Load strategy if session has one
+    if (s.strategy_id) {
+      const { data: strat } = await supabase.from('strategies').select('*').eq('id', s.strategy_id).single()
+      if (strat) setStrategy(strat as Strategy)
+    }
+
+    const { data: activeTrades } = await supabase
+      .from('trades').select('*').eq('session_id', id).in('status', ['open', 'pending'])
+    setTrades((activeTrades as Trade[]) ?? [])
+    setLoading(false)
+  }
+
+  const closeAllOpenTrades = useCallback(async (
+    openTrades: Trade[], exitPrice: number, atIdx: number,
+  ): Promise<number> => {
+    const cs = symRef.current.contractSize
+    let delta = 0
+    for (const trade of openTrades) {
+      const pnl = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
+      delta += pnl
+      await supabase.from('trades').update({
+        status: 'closed', exit_price: exitPrice, pnl, closed_at_idx: atIdx,
+      }).eq('id', trade.id)
+    }
+    return delta
+  }, [supabase])
+
+  const advanceCandlesRef = useRef<Candle[]>([])
+  const advanceIdxRef     = useRef<number>(0)
+  useEffect(() => { advanceCandlesRef.current = aggregatedCandles }, [aggregatedCandles])
+  useEffect(() => { advanceIdxRef.current = displayIdx }, [displayIdx])
+
+  const advance = useCallback(async (steps: number) => {
+    if (accountBreached) return
+    const c   = advanceCandlesRef.current
+    const i   = advanceIdxRef.current
+    const { trades: tr, balance: bal, m1AbsIdx: curM1Abs } = stateRef.current
+    if (!c.length) return
+    const m1All = originalCandlesRef.current
+    const cs    = symRef.current.contractSize
+    const end   = Math.min(i + steps, c.length)
+    const slice = c.slice(i, end)
+
+    let updatedTrades = [...tr]
+    let deltaBal      = 0
+    for (let offset = 0; offset < slice.length; offset++) {
+      const candle = slice[offset]
+      const triggerIdx = i + offset + 1
+      updatedTrades = updatedTrades.map(trade => {
+        if (trade.status === 'pending') {
+          const entryPrice = checkPendingEntry(trade, candle)
+          if (entryPrice !== null) {
+            return { ...trade, status: 'open' as const, entry_price: entryPrice, opened_at_idx: triggerIdx }
+          }
+          return trade
+        }
+        if (trade.status !== 'open') return trade
+        const exitPrice = checkSlTp(trade, candle)
+        if (exitPrice !== null) {
+          const pnl = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
+          deltaBal += pnl
+          return { ...trade, status: 'closed' as const, exit_price: exitPrice, pnl, closed_at_idx: triggerIdx }
+        }
+        return trade
+      })
+    }
+
+    for (const trade of updatedTrades) {
+      const prev = tr.find(t => t.id === trade.id)
+      if (!prev) continue
+      if (
+        prev.status !== trade.status ||
+        prev.opened_at_idx !== trade.opened_at_idx ||
+        prev.closed_at_idx !== trade.closed_at_idx ||
+        prev.exit_price !== trade.exit_price ||
+        prev.pnl !== trade.pnl
+      ) {
+        await supabase.from('trades').update({
+          status: trade.status,
+          opened_at_idx: trade.opened_at_idx,
+          closed_at_idx: trade.closed_at_idx,
+          exit_price: trade.exit_price,
+          pnl: trade.pnl,
+        }).eq('id', trade.id)
+      }
+    }
+
+    // Advance M1 absolute index by steps × TF_SECONDS worth of M1 candles
+    const targetTs = (m1All[curM1Abs]?.time ?? 0) + steps * TF_SECONDS[timeframe]
+    let newM1Abs   = curM1Abs
+    for (let j = m1All.length - 1; j >= 0; j--) {
+      if (m1All[j].time <= targetTs) { newM1Abs = j; break }
+    }
+
+    const newBal     = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
+    const lastCandle = c[end - 1]
+    const stillOpen  = updatedTrades.filter(t => t.status === 'open')
+    const unrealised = lastCandle
+      ? stillOpen.reduce((a, t) => a + calcPnl(t.side, t.entry_price, lastCandle.close, t.quantity, cs), 0)
+      : 0
+    const breached = newBal + unrealised <= 0
+
+    let finalBal    = newBal
+    let finalTrades = updatedTrades
+    if (breached && stillOpen.length > 0 && lastCandle) {
+      const closePnl = await closeAllOpenTrades(stillOpen, lastCandle.close, end)
+      finalBal    = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
+      finalTrades = updatedTrades.map(t =>
+        t.status === 'open'
+          ? { ...t, status: 'closed' as const, exit_price: lastCandle.close,
+              pnl: calcPnl(t.side, t.entry_price, lastCandle.close, t.quantity, cs),
+              closed_at_idx: end }
+          : t
+      )
+    }
+
+    setBalance(finalBal)
+    setTrades(finalTrades)
+    setM1AbsIdx(newM1Abs)   // ← single state update drives price + time
+    if (breached) setAccountBreached(true)
+
+    await supabase.from('sessions').update({
+      candle_index: newM1Abs,   // absolute M1 index
+      end_capital:  finalBal,
+      is_completed: end >= c.length || breached,
+    }).eq('id', id)
+  }, [id, supabase, accountBreached, timeframe, closeAllOpenTrades])
+
+  async function execTrade(side: 'buy' | 'sell') {
+    if (accountBreached) return false
+    const c = advanceCandlesRef.current
+    const i = advanceIdxRef.current
+    const cur = c[i - 1]
+    if (!cur || !session) return false
+    const m1Now = originalCandlesRef.current[stateRef.current.m1AbsIdx]
+    const marketEntry = m1Now?.close ?? cur.close
+    const pendingEntry = entryVal ? parseFloat(entryVal) : NaN
+    const entry = orderType === 'pending' && Number.isFinite(pendingEntry) ? pendingEntry : marketEntry
+    if (orderType === 'pending' && !Number.isFinite(pendingEntry)) return false
+
+    if (slVal) {
+      const sl = parseFloat(slVal)
+      if (!isNaN(sl)) {
+        if (side === 'buy'  && sl >= entry) { setSlError('SL must be below entry for a buy'); return false }
+        if (side === 'sell' && sl <= entry) { setSlError('SL must be above entry for a sell'); return false }
+      }
+    }
+    setSlError('')
+    if (tpVal) {
+      const tp = parseFloat(tpVal)
+      if (!isNaN(tp)) {
+        if (side === 'buy'  && tp <= entry) { setTpError('TP must be above entry for a buy'); return false }
+        if (side === 'sell' && tp >= entry) { setTpError('TP must be below entry for a sell'); return false }
+      }
+    }
+    setTpError('')
+
+    const day = WEEKDAYS[new Date().getDay() - 1] ?? WEEKDAYS[0]
+    const { data } = await supabase.from('trades').insert({
+      session_id: id, user_id: user!.id, side,
+      entry_price: entry,
+      quantity:    parseFloat(qty) || 0.1,
+      stop_loss:   slVal ? parseFloat(slVal) : null,
+      take_profit: tpVal ? parseFloat(tpVal) : null,
+      status: orderType === 'pending' ? 'pending' : 'open', opened_at_idx: i, weekday: day,
+    }).select().single()
+    if (data) setTrades(prev => [...prev, data as Trade])
+    return Boolean(data)
+  }
+
+  async function closeTrade(tradeId: string) {
+    const c   = advanceCandlesRef.current
+    const i   = advanceIdxRef.current
+    const bal = stateRef.current.balance
+    const cur = c[i - 1]
+    const trade = stateRef.current.trades.find(t => t.id === tradeId)
+    if (!cur || !trade) return
+    if (trade.status === 'pending') {
+      await supabase.from('trades').update({
+        status: 'closed', pnl: 0, closed_at_idx: i,
+      }).eq('id', tradeId)
+      setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, status: 'closed' as const, pnl: 0, closed_at_idx: i } : t))
+      return
+    }
+    const cs       = symRef.current.contractSize
+    const m1Now    = originalCandlesRef.current[stateRef.current.m1AbsIdx]
+    const exitPrice = m1Now?.close ?? cur.close
+    const pnl      = calcPnl(trade.side, trade.entry_price, exitPrice, trade.quantity, cs)
+    const newBal   = parseFloat(Math.max(0, bal + pnl).toFixed(2))
+
+    const remaining  = stateRef.current.trades.filter(t => t.status === 'open' && t.id !== tradeId)
+    const unrealised = remaining.reduce((a, t) => a + calcPnl(t.side, t.entry_price, exitPrice, t.quantity, cs), 0)
+    const breached   = newBal + unrealised <= 0
+
+    await supabase.from('trades').update({
+      status: 'closed', exit_price: exitPrice, pnl, closed_at_idx: i,
+    }).eq('id', tradeId)
+    await supabase.from('sessions').update({ end_capital: newBal }).eq('id', id)
+
+    let finalBal = newBal
+    let closedRemaining: Trade[] = []
+    if (breached && remaining.length > 0) {
+      const closePnl = await closeAllOpenTrades(remaining, exitPrice, i)
+      finalBal = parseFloat(Math.max(0, newBal + closePnl).toFixed(2))
+      closedRemaining = remaining.map(t => ({
+        ...t, status: 'closed' as const, exit_price: exitPrice,
+        pnl: calcPnl(t.side, t.entry_price, exitPrice, t.quantity, cs), closed_at_idx: i,
+      }))
+    }
+
+    setTrades(prev => prev.map(t => {
+      if (t.id === tradeId) return { ...t, status: 'closed' as const, exit_price: exitPrice, pnl, closed_at_idx: i }
+      return closedRemaining.find(r => r.id === t.id) ?? t
+    }))
+    setBalance(finalBal)
+    if (breached) setAccountBreached(true)
+  }
+
+  const handleSetSL = async (tradeId: string, price: number) => {
+    if (price !== 0) {
+      const trade = stateRef.current.trades.find(t => t.id === tradeId)
+      if (trade) {
+        if (trade.side === 'buy'  && price >= trade.entry_price) return
+        if (trade.side === 'sell' && price <= trade.entry_price) return
+      }
+    }
+    const val = price === 0 ? null : parseFloat(price.toFixed(symRef.current.decimals))
+    await supabase.from('trades').update({ stop_loss: val }).eq('id', tradeId)
+    setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, stop_loss: val } : t))
+  }
+
+  const handleSetTP = async (tradeId: string, price: number) => {
+    if (price !== 0) {
+      const trade = stateRef.current.trades.find(t => t.id === tradeId)
+      if (trade) {
+        if (trade.side === 'buy'  && price <= trade.entry_price) return
+        if (trade.side === 'sell' && price >= trade.entry_price) return
+      }
+    }
+    const val = price === 0 ? null : parseFloat(price.toFixed(symRef.current.decimals))
+    await supabase.from('trades').update({ take_profit: val }).eq('id', tradeId)
+    setTrades(prev => prev.map(t => t.id === tradeId ? { ...t, take_profit: val } : t))
+  }
+
+  const sym     = symRef.current
+  const m1All   = originalCandlesRef.current
+  const m1Candle  = m1All[m1AbsIdx]
+  const m1Price   = m1Candle?.close  ?? 0
+  const m1Time    = m1Candle?.time   ?? 0
+  const m1High    = m1Candle?.high   ?? 0
+  const m1Low     = m1Candle?.low    ?? 0
+  const m1Open    = m1Candle?.open   ?? 0
+
+  const done     = m1AbsIdx >= m1All.length - 1
+  const { openTr, activeTr, closedTr } = useMemo(() => {
+    const open: Trade[] = []
+    const active: Trade[] = []
+    const closed: Trade[] = []
+    for (const trade of trades) {
+      if (trade.status === 'open') {
+        open.push(trade)
+        active.push(trade)
+      } else if (trade.status === 'pending') {
+        active.push(trade)
+      } else {
+        closed.push(trade)
+      }
+    }
+    return { openTr: open, activeTr: active, closedTr: closed }
+  }, [trades])
+  const realizedPnl = parseFloat(closedTr.reduce((a, tr) => a + (tr.pnl ?? 0), 0).toFixed(2))
+  const openPnl  = m1Price
+    ? openTr.reduce((a, tr) => a + calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize), 0)
+    : 0
+  const equity   = parseFloat((balance + openPnl).toFixed(2))
+  const sessionPnl = session ? equity - session.start_capital : 0
+  const equityColor = sessionPnl > 0 ? 'var(--green)' : sessionPnl < 0 ? 'var(--red)' : 'var(--text-primary)'
+
+  const m1Total    = m1All.length
+  const m1Playable = m1Total - playableStartIdxRef.current
+
+  const progress   = m1Playable > 0
+    ? Math.round(Math.max(0, m1AbsIdx - playableStartIdxRef.current) / m1Playable * 100)
+    : 0
+
+  const formatTime = (ts: number, tzValue: string) => {
+    if (!ts) return '—'
+    const off = TIMEZONES.find(z => z.value === tzValue)?.offset ?? 0
+    const d   = new Date(ts * 1000 + off * 3600 * 1000)
+    return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+  }
+
+  const dateStr = formatTime(m1Time, timezone)
+  const previewEntryLabel = useMemo(() => {
+    if (!tradeSide) return null
+    if (orderType === 'market') return tradeSide === 'buy' ? 'Buy' : 'Sell'
+    const previewPrice = entryVal ? parseFloat(entryVal) : m1Price
+    if (!Number.isFinite(previewPrice)) return tradeSide === 'buy' ? 'Buy' : 'Sell'
+    if (tradeSide === 'buy') return previewPrice > m1Price ? 'Buy Stop' : 'Buy Limit'
+    return previewPrice > m1Price ? 'Sell Limit' : 'Sell Stop'
+  }, [entryVal, m1Price, orderType, tradeSide])
+
+  if (loading || !session) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{background:'var(--bg-primary)'}}>
+        <Spinner size="lg"/>
+        <p className="text-sm" style={{color:'var(--text-muted)'}}>{t('loading')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden" style={{background:'var(--bg-primary)'}}>
+
+      {accountBreached && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'var(--bg-secondary)', border:'2px solid #ef4444', borderRadius:16, padding:'2.5rem 2rem', maxWidth:380, textAlign:'center', boxShadow:'0 8px 40px rgba(239,68,68,0.3)' }}>
+            <div style={{ fontSize:52, lineHeight:1, marginBottom:16 }}>💥</div>
+            <h2 style={{ color:'#ef4444', fontSize:22, fontWeight:700, margin:'0 0 8px' }}>Account Breached</h2>
+            <p style={{ color:'var(--text-muted)', fontSize:14, marginBottom:24, lineHeight:1.6 }}>
+              Your equity reached $0.<br/>All positions have been closed.
+            </p>
+            <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
+              <button onClick={() => router.push('/dashboard/sessions')} style={{ background:'#ef4444', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontWeight:700, cursor:'pointer', fontSize:14 }}>Back to Sessions</button>
+              <button onClick={() => setAccountBreached(false)} style={{ background:'transparent', color:'var(--text-muted)', border:'1px solid var(--border-default)', borderRadius:8, padding:'10px 20px', fontWeight:600, cursor:'pointer', fontSize:14 }}>Dismiss</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 py-2 shrink-0 flex-wrap min-h-[44px]"
+        style={{borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
+        <button onClick={() => router.push('/dashboard/sessions')}
+          className="text-sm rounded-lg px-3 py-1.5 transition-all shrink-0"
+          style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>← Back</button>
+        <Badge variant="blue">{session.symbol}</Badge>
+        <span className="text-xs truncate max-w-[180px]" style={{color:'var(--text-muted)'}}>{session.name}</span>
+
+        {/* Strategy checklist dropdown */}
+        {strategy && (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setCheckOpen(p => !p)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${checkOpen ? strategy.color : 'var(--border-default)'}`,
+                background: checkOpen ? `${strategy.color}18` : 'var(--bg-tertiary)',
+                color: checkOpen ? strategy.color : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+              }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: strategy.color, flexShrink: 0 }} />
+              {strategy.name}
+              <span style={{ fontSize: 10, opacity: 0.7 }}>{checkOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {checkOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 100,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border-default)',
+                borderRadius: 12, padding: '14px 16px', minWidth: 260,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  Strategy Rules
+                </p>
+                {strategy.checklist && strategy.checklist.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {strategy.checklist.map((item, i) => (
+                      <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                        <input type="checkbox"
+                          checked={!!checkedItems[i]}
+                          onChange={e => setCheckedItems(p => ({ ...p, [i]: e.target.checked }))}
+                          style={{ marginTop: 1, accentColor: strategy.color, width: 14, height: 14, flexShrink: 0 }}
+                        />
+                        <span style={{
+                          fontSize: 13, color: checkedItems[i] ? 'var(--text-muted)' : 'var(--text-primary)',
+                          textDecoration: checkedItems[i] ? 'line-through' : 'none',
+                          lineHeight: 1.4,
+                        }}>{item}</span>
+                      </label>
+                    ))}
+                    {/* Progress bar */}
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ height: 3, borderRadius: 2, background: 'var(--border-subtle)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 2, background: strategy.color,
+                          width: `${(Object.values(checkedItems).filter(Boolean).length / strategy.checklist.length) * 100}%`,
+                          transition: 'width 0.3s',
+                        }} />
+                      </div>
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {Object.values(checkedItems).filter(Boolean).length} / {strategy.checklist.length} rules checked
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No rules defined for this strategy.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* OHLC — all from M1 candle, never from aggregated */}
+        {m1Candle && (
+          <div className="flex gap-3 ml-1">
+            {([['O', m1Open],['H', m1High],['L', m1Low],['C', m1Price]] as [string,number][]).map(([lb,v]) => (
+              <div key={lb} className="flex gap-1 items-baseline">
+                <span className="text-[9px] uppercase leading-none" style={{color:'var(--text-muted)'}}>{lb}</span>
+                <span className="font-mono text-[11px]" style={{color:
+                  lb==='H' ? 'var(--green)' : lb==='L' ? 'var(--red)' :
+                  lb==='C' ? (m1Price >= m1Open ? 'var(--green)' : 'var(--red)') : 'var(--text-primary)'}}>
+                  {fmtPrice(v, sym.decimals)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="ml-auto flex items-center gap-4 shrink-0">
+          <div className="text-right">
+            <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Equity</p>
+            <p className="font-mono font-bold text-base" style={{color: equityColor}}>
+              {fmtMoney(equity)}
+            </p>
+          </div>
+          {openPnl !== 0 && (
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>{t('openPnl')}</p>
+              <p className="font-mono font-semibold text-sm" style={{color: openPnl>=0?'var(--green)':'var(--red)'}}>
+                {openPnl>=0?'+':''}{openPnl.toFixed(2)}
+              </p>
+            </div>
+          )}
+          {realizedPnl !== 0 && (
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Realized P&L</p>
+              <p className="font-mono font-semibold text-sm" style={{color: realizedPnl>=0?'var(--green)':'var(--red)'}}>
+                {realizedPnl>=0?'+':''}{realizedPnl.toFixed(2)}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, minHeight:0 }}>
+
+          <div style={{ flex:1, minHeight:0, overflow:'hidden', position:'relative' }}>
+            {/* TF picker */}
+            <div style={{ position:'absolute', top:8, left:8, zIndex:10, display:'flex', gap:4, flexWrap:'wrap' }}>
+              {TIMEFRAMES.map(tf => (
+                <button key={tf} onClick={() => setTimeframe(tf)} style={{
+                  padding:'2px 7px', fontSize:11, borderRadius:4, cursor:'pointer', transition:'all 0.15s',
+                  fontWeight: timeframe===tf ? 700 : 400,
+                  border: timeframe===tf ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                  background: timeframe===tf ? 'var(--accent-muted)' : 'var(--bg-secondary)',
+                  color: timeframe===tf ? 'var(--accent)' : 'var(--text-muted)',
+                }}>{tf.toUpperCase()}</button>
+              ))}
+              <button onClick={() => setShowIndicators(p => !p)} style={{
+                padding:'2px 9px', fontSize:11, borderRadius:4, cursor:'pointer', marginLeft:4,
+                fontWeight:600,
+                border: showIndicators ? '1px solid var(--accent)' : '1px solid var(--border-default)',
+                background: showIndicators ? 'var(--accent-muted)' : 'var(--bg-secondary)',
+                color: showIndicators ? 'var(--accent)' : 'var(--text-muted)',
+              }}>Indicators</button>
+            </div>
+
+            {/* Indicator panel */}
+            {showIndicators && (
+              <div style={{
+                position:'absolute', top:36, left:8, zIndex:20, width:280,
+                background:'var(--bg-secondary)', border:'1px solid var(--border-default)',
+                borderRadius:10, padding:'14px', boxShadow:'0 6px 24px rgba(0,0,0,0.4)',
+                display:'flex', flexDirection:'column', gap:0,
+                maxHeight:'70vh', overflowY:'auto',
+              }}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <span style={{fontSize:12,fontWeight:700,color:'var(--text-primary)'}}>Indicators</span>
+                  <button onClick={() => setShowIndicators(false)} style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>
+                </div>
+
+                {/* ── Overlay section ── */}
+                <SectionLabel>Overlay</SectionLabel>
+
+                <IndicatorRow
+                  label="SMA"
+                  enabled={indicatorConfig.sma.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, sma:{...p.sma, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:6,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.sma.period} min={1} max={500}
+                        onChange={e => setIndicatorConfig(p => ({...p, sma:{...p.sma, period:parseInt(e.target.value)||p.sma.period}}))}
+                        style={{width:56,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Color
+                      <input type="color" value={indicatorConfig.sma.color}
+                        onChange={e => setIndicatorConfig(p => ({...p, sma:{...p.sma, color:e.target.value}}))}
+                        style={{width:28,height:22,padding:0,border:'none',background:'none',cursor:'pointer',marginLeft:4}} />
+                    </label>
+                  </div>
+                </IndicatorRow>
+
+                <IndicatorRow
+                  label="EMA"
+                  enabled={indicatorConfig.ema.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, ema:{...p.ema, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:6,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.ema.period} min={1} max={500}
+                        onChange={e => setIndicatorConfig(p => ({...p, ema:{...p.ema, period:parseInt(e.target.value)||p.ema.period}}))}
+                        style={{width:56,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Color
+                      <input type="color" value={indicatorConfig.ema.color}
+                        onChange={e => setIndicatorConfig(p => ({...p, ema:{...p.ema, color:e.target.value}}))}
+                        style={{width:28,height:22,padding:0,border:'none',background:'none',cursor:'pointer',marginLeft:4}} />
+                    </label>
+                  </div>
+                </IndicatorRow>
+
+                <IndicatorRow
+                  label="Bollinger Bands"
+                  enabled={indicatorConfig.bb.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, bb:{...p.bb, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.bb.period} min={2} max={200}
+                        onChange={e => setIndicatorConfig(p => ({...p, bb:{...p.bb, period:parseInt(e.target.value)||20}}))}
+                        style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>StdDev
+                      <input type="number" value={indicatorConfig.bb.mult} min={0.5} max={5} step={0.5}
+                        onChange={e => setIndicatorConfig(p => ({...p, bb:{...p.bb, mult:parseFloat(e.target.value)||2}}))}
+                        style={{width:44,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                  </div>
+                </IndicatorRow>
+
+                {/* ── Sub-pane section ── */}
+                <SectionLabel>Sub-pane</SectionLabel>
+
+                <IndicatorRow
+                  label="RSI"
+                  enabled={indicatorConfig.rsi.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, rsi:{...p.rsi, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:8,marginTop:6,alignItems:'center'}}>
+                    <label style={{fontSize:11,color:'var(--text-muted)'}}>Period
+                      <input type="number" value={indicatorConfig.rsi.period} min={2} max={100}
+                        onChange={e => setIndicatorConfig(p => ({...p, rsi:{...p.rsi, period:parseInt(e.target.value)||14}}))}
+                        style={{width:52,padding:'2px 6px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                    </label>
+                  </div>
+                </IndicatorRow>
+
+                <IndicatorRow
+                  label="MACD"
+                  enabled={indicatorConfig.macd.enabled}
+                  onToggle={v => setIndicatorConfig(p => ({...p, macd:{...p.macd, enabled:v}}))}
+                >
+                  <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap',alignItems:'center'}}>
+                    {([['Fast','fast',1,50],['Slow','slow',1,100],['Signal','signal',1,50]] as const).map(([lbl,key,min,max]) => (
+                      <label key={key} style={{fontSize:11,color:'var(--text-muted)'}}>
+                        {lbl}
+                        <input type="number" value={(indicatorConfig.macd as any)[key]} min={min} max={max}
+                          onChange={e => setIndicatorConfig(p => ({...p, macd:{...p.macd, [key]:parseInt(e.target.value)||(indicatorConfig.macd as any)[key]}}))}
+                          style={{width:40,padding:'2px 4px',fontSize:11,borderRadius:4,background:'var(--bg-primary)',border:'1px solid var(--border-default)',color:'var(--text-primary)',marginLeft:4}} />
+                      </label>
+                    ))}
+                  </div>
+                </IndicatorRow>
+
+              </div>
+            )}
+            <WorkspaceChart
+              ref={chartHandleRef}
+              candles={aggregatedCandles.slice(0, displayIdx)}
+              openTrades={activeTr}
+              symbol={sym}
+              lastPrice={m1Price || undefined}
+              indicatorConfig={indicatorConfig}
+              onSetSL={handleSetSL}
+              onSetTP={handleSetTP}
+              onCloseTrade={closeTrade}
+              previewSide={tradeSide}
+              previewEntry={tradeSide ? (orderType==='pending' && entryVal ? parseFloat(entryVal) : m1Price) : null}
+              previewSL={tradeSide && slVal ? parseFloat(slVal) || null : null}
+              previewTP={tradeSide && tpVal ? parseFloat(tpVal) || null : null}
+              previewEntryLabel={previewEntryLabel}
+              onPreviewSL={price => setSlVal(parseFloat(price.toFixed(sym.decimals)).toString())}
+              onPreviewTP={price => setTpVal(parseFloat(price.toFixed(sym.decimals)).toString())}
+              onPreviewEntry={price => setEntryVal(parseFloat(price.toFixed(sym.decimals)).toString())}
+            />
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center gap-3 px-4 py-2.5 shrink-0 flex-wrap"
+            style={{borderTop:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
+            <button onClick={() => advance(1)} disabled={done || accountBreached}
+              className="px-4 py-2 font-bold text-sm rounded-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{background:'var(--accent)'}}>
+              {t('nextCandle')}
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{color:'var(--text-muted)'}}>{t('skip')}</span>
+              <select value={skipVal} onChange={e=>setSkipVal(Number(e.target.value))}
+                className="rounded-lg px-2 py-1.5 text-xs outline-none w-16 cursor-pointer"
+                style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}>
+                {SKIP_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span className="text-xs" style={{color:'var(--text-muted)'}}>{t('candles')}</span>
+              <button onClick={() => advance(skipVal)} disabled={done || accountBreached}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{border:'1px solid var(--border-default)', color:'var(--text-secondary)'}}>→</button>
+            </div>
+
+            {done && !accountBreached && (
+              <span className="text-xs font-semibold px-3 py-1 rounded-full"
+                style={{background:'var(--accent-muted)', color:'var(--accent)', border:'1px solid var(--accent-border)'}}>
+                {t('allCandlesRevealed')}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="font-mono text-[10px] whitespace-nowrap" style={{color:'var(--text-muted)'}}>
+                {formatTime(m1Time, timezone)}
+              </span>
+              <select value={timezone} onChange={e=>setTimezone(e.target.value)}
+                className="rounded-lg px-2 py-1 text-xs outline-none cursor-pointer"
+                style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-default)', color:'var(--text-primary)'}}>
+                {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Indicator sub-panes */}
+          <IndicatorPanes
+            candles={aggregatedCandles.slice(0, displayIdx)}
+            config={indicatorConfig}
+            mainChartRef={chartHandleRef.current?.chartRef ?? { current: null } as any}
+          />
+
+          {/* Trades table */}
+          <div className="h-48 flex flex-col shrink-0" style={{borderTop:'1px solid var(--border-subtle)'}}>
+            <TabBar
+              tabs={[{key:'open', label:`${t('openPositions')} (${activeTr.length})`}, {key:'closed', label:`${t('closedTrades')} (${closedTr.length})`}]}
+              active={tradeTab} onChange={setTradeTab}
+            />
+            <div className="flex-1 overflow-y-auto text-xs">
+              {tradeTab === 'open' ? (
+                activeTr.length === 0
+                  ? <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noOpenTrades')}</div>
+                  : <table className="w-full">
+                      <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
+                        <tr>{['Side','Entry','SL','TP','Qty','Unreal. P&L',''].map((h,i)=>(
+                          <th key={i} className="text-left px-3 py-1.5 font-normal text-[9px] uppercase tracking-widest" style={{color:'var(--text-muted)'}}>{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {activeTr.map(tr => {
+                          const upnl = tr.status === 'open' && m1Price ? calcPnl(tr.side, tr.entry_price, m1Price, tr.quantity, sym.contractSize) : 0
+                          return (
+                            <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
+                              <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.status === 'pending' ? `PENDING ${tr.side.toUpperCase()}` : tr.side.toUpperCase()}</Badge></td>
+                              <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
+                              <td className="px-3 py-2 font-mono">
+                                {tr.stop_loss ? (
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:5}}>
+                                    <span style={{color:'var(--red)'}}>{fmtPrice(tr.stop_loss, sym.decimals)}</span>
+                                    <button onClick={() => handleSetSL(tr.id, 0)} title="Remove SL" style={{
+                                      background:'#ef4444', border:'none', borderRadius:5,
+                                      width:16, height:16, display:'inline-flex', alignItems:'center',
+                                      justifyContent:'center', cursor:'pointer', padding:0, flexShrink:0,
+                                    }}>
+                                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                        <path d="M1 1l6 6M7 1L1 7" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+                                      </svg>
+                                    </button>
+                                  </span>
+                                ) : <span style={{color:'var(--text-muted)'}}>—</span>}
+                              </td>
+                              <td className="px-3 py-2 font-mono">
+                                {tr.take_profit ? (
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:5}}>
+                                    <span style={{color:'var(--green)'}}>{fmtPrice(tr.take_profit, sym.decimals)}</span>
+                                    <button onClick={() => handleSetTP(tr.id, 0)} title="Remove TP" style={{
+                                      background:'#ef4444', border:'none', borderRadius:5,
+                                      width:16, height:16, display:'inline-flex', alignItems:'center',
+                                      justifyContent:'center', cursor:'pointer', padding:0, flexShrink:0,
+                                    }}>
+                                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                        <path d="M1 1l6 6M7 1L1 7" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+                                      </svg>
+                                    </button>
+                                  </span>
+                                ) : <span style={{color:'var(--text-muted)'}}>—</span>}
+                              </td>
+                              <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
+                              <td className="px-3 py-2 font-mono font-semibold" style={{color: upnl>=0?'var(--green)':'var(--red)'}}>
+                                {tr.status === 'pending' ? '—' : `${upnl>=0?'+':''}${upnl.toFixed(2)}`}
+                              </td>
+                              <td className="px-3 py-2">
+                                <button onClick={() => closeTrade(tr.id)}
+                                  className="rounded px-2 py-0.5 text-[10px] transition-colors"
+                                  style={{color:'var(--red)', border:'1px solid var(--red-muted)'}}>
+                                  {tr.status === 'pending' ? 'Cancel' : t('close')}
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+              ) : (
+                closedTr.length === 0
+                  ? <div className="flex items-center justify-center h-full text-sm" style={{color:'var(--text-muted)'}}>{t('noClosedTrades')}</div>
+                  : <table className="w-full">
+                      <thead className="sticky top-0" style={{background:'var(--bg-secondary)'}}>
+                        <tr>{['Side','Entry','Exit','Qty','P&L'].map((h,i)=>(
+                          <th key={i} className="text-left px-3 py-1.5 font-normal text-[9px] uppercase tracking-widest" style={{color:'var(--text-muted)'}}>{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {closedTr.map(tr => (
+                          <tr key={tr.id} style={{borderBottom:'1px solid var(--border-subtle)'}}>
+                            <td className="px-3 py-2"><Badge variant={tr.side==='buy'?'green':'red'}>{tr.side.toUpperCase()}</Badge></td>
+                            <td className="px-3 py-2 font-mono">{fmtPrice(tr.entry_price, sym.decimals)}</td>
+                            <td className="px-3 py-2 font-mono">{tr.exit_price ? fmtPrice(tr.exit_price, sym.decimals) : '—'}</td>
+                            <td className="px-3 py-2 font-mono">{tr.quantity}L</td>
+                            <td className="px-3 py-2 font-mono font-semibold" style={{color:(tr.pnl??0)>=0?'var(--green)':'var(--red)'}}>
+                              {(tr.pnl??0)>=0?'+':''}{(tr.pnl??0).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right panel — Exness-style trading form */}
+        <div style={{
+          width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)',
+          overflow: 'auto',
+        }}>
+          <TradeForm
+            symbol={sym}
+            sellPrice={m1Price}
+            buyPrice={m1Price}
+            balance={balance}
+            qty={qty} setQty={setQty}
+            slVal={slVal} setSlVal={setSlVal}
+            tpVal={tpVal} setTpVal={setTpVal}
+            slError={slError} tpError={tpError}
+            entryVal={entryVal} setEntryVal={setEntryVal}
+            accountBreached={accountBreached}
+            openTr={activeTr}
+            openPnl={openPnl}
+            onBuy={async () => {
+              const success = await execTrade('buy')
+              if (success) resetTradeDraft()
+              return success
+            }}
+            onSell={async () => {
+              const success = await execTrade('sell')
+              if (success) resetTradeDraft()
+              return success
+            }}
+            onSideChange={setTradeSide}
+            onOrderTypeChange={t => resetTradeDraft(t)}
+          />
+
+          {strategy && (
+            <div style={{ padding: '14px' }}>
+              <div style={{
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 14,
+                padding: '14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: strategy.color, flexShrink: 0 }} />
+                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{strategy.name}</p>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {strategy.description?.trim() || 'Workspace strategy linked to this replay session.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Indicator panel helpers ───────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{
+      fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
+      textTransform: 'uppercase', letterSpacing: '0.08em',
+      margin: '8px 0 4px', borderTop: '1px solid var(--border-subtle)', paddingTop: 8,
+    }}>{children}</p>
+  )
+}
+
+function IndicatorRow({ label, enabled, onToggle, children }: {
+  label: string
+  enabled: boolean
+  onToggle: (v: boolean) => void
+  children?: React.ReactNode
+}) {
+  return (
+    <div style={{ marginBottom: 4 }}>
+      <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+        <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)}
+          style={{ accentColor:'var(--accent)', width:13, height:13, flexShrink:0 }} />
+        <span style={{ fontSize:12, fontWeight:600, color:'var(--text-primary)' }}>{label}</span>
+      </label>
+      {enabled && children}
+    </div>
+  )
+}
+
+// ── Risk calculator row ───────────────────────────────────────────
+function Row({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ fontWeight: 700, color }}>{value}</span>
+    </div>
+  )
+}
