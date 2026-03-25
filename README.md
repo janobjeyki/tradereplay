@@ -4,7 +4,7 @@ Candle-by-candle trading simulator — **Next.js 14** (App Router) + **Supabase*
 
 ---
 
-## Tech Stack
+## Tech Stack:
 
 | Layer       | Technology                                  |
 |-------------|---------------------------------------------|

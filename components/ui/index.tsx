@@ -143,10 +143,18 @@ export function TabBar({ tabs, active, onChange }: { tabs:{key:string;label:stri
 }
 
 // ── ThemeToggle ───────────────────────────────────────────────────
-export function ThemeToggle({ theme, onToggle }: { theme: 'dark'|'light'; onToggle: ()=>void }) {
+export function ThemeToggle({
+  theme,
+  onToggle,
+  className,
+}: {
+  theme: 'dark'|'light'
+  onToggle: ()=>void
+  className?: string
+}) {
   return (
     <button onClick={onToggle} title="Toggle theme"
-      className="w-9 h-9 flex items-center justify-center rounded-full transition-all hover:bg-[var(--bg-elevated)]"
+      className={cn('w-9 h-9 flex items-center justify-center rounded-full transition-all hover:bg-[var(--bg-elevated)]', className)}
       style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)', background:'var(--bg-tertiary)'}}>
       {theme === 'dark' ? (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

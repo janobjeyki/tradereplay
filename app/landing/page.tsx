@@ -18,36 +18,51 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="sticky top-0 z-50 px-6 md:px-10 pt-6">
         <div className="glass-card rounded-[24px] flex items-center justify-between px-5 py-3.5 gap-4">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <TradeLabLogo className="w-[150px]" />
-        </div>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <TradeLabLogo className="w-[150px]" />
+          </div>
 
-        <div className="hidden md:flex gap-6 text-sm" style={{color:'var(--text-secondary)'}}>
-          {(['about','pricing','blog','contact'] as const).map(k => (
-            <span key={k} className="cursor-pointer transition-colors hover:text-[var(--text-primary)]">{t(k)}</span>
-          ))}
-        </div>
+          <div className="hidden md:flex items-center gap-7 text-sm font-medium" style={{color:'var(--text-secondary)'}}>
+            {(['about','pricing','blog','contact'] as const).map(k => (
+              <span key={k} className="cursor-pointer transition-colors hover:text-[var(--text-primary)]">{t(k)}</span>
+            ))}
+          </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <select value={lang} onChange={e=>setLang(e.target.value as Language)}
-            className="rounded-lg px-2.5 py-1.5 text-xs outline-none cursor-pointer appearance-none pr-6"
-            style={{background:'var(--bg-tertiary)', border:'1px solid var(--border-default)', color:'var(--text-secondary)',
-              backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a87ac' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
-              backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center'}}>
-            <option value="en">EN</option>
-            <option value="ru">RU</option>
-            <option value="uz">UZ</option>
-          </select>
-          <ThemeToggle theme={theme} onToggle={toggleTheme}/>
-          <Link href="/auth/login" className="px-3.5 py-1.5 text-sm font-medium rounded-lg transition-all"
-            style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)'}}>
-            {t('signIn')}
-          </Link>
-          <Link href="/auth/register" className="px-3.5 py-1.5 text-sm font-semibold rounded-lg transition-all text-white"
-            style={{background:'var(--accent)'}}>
-            {t('getStarted')}
-          </Link>
-        </div>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <select
+              value={lang}
+              onChange={e=>setLang(e.target.value as Language)}
+              className="h-11 min-w-[76px] rounded-xl px-3.5 text-sm font-semibold outline-none cursor-pointer appearance-none pr-8 transition-colors"
+              style={{
+                background:'var(--bg-tertiary)',
+                border:'1px solid var(--border-default)',
+                color:'var(--text-secondary)',
+                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a87ac' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
+                backgroundRepeat:'no-repeat',
+                backgroundPosition:'right 12px center'
+              }}>
+              <option value="en">EN</option>
+              <option value="ru">RU</option>
+              <option value="uz">UZ</option>
+            </select>
+            <ThemeToggle
+              theme={theme}
+              onToggle={toggleTheme}
+              className="h-11 w-11 rounded-xl hover:-translate-y-0.5"
+            />
+            <Link
+              href="/auth/login"
+              className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold transition-all hover:-translate-y-0.5"
+              style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)', background:'var(--bg-tertiary)'}}>
+              {t('signIn')}
+            </Link>
+            <Link
+              href="/auth/register"
+              className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-bold transition-all hover:-translate-y-0.5 text-white"
+              style={{background:'var(--accent)', boxShadow:'0 14px 30px rgba(244, 87, 131, 0.24)'}}>
+              {t('getStarted')}
+            </Link>
+          </div>
         </div>
       </nav>
 
