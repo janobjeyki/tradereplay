@@ -8,7 +8,7 @@ export function TradeLabLogo({ className }: { className?: string }) {
     <img
       src={theme === 'light' ? '/brand/tradelab-light.png' : '/brand/tradelab-logo.png'}
       alt="TradeLab"
-      className={cn('block h-auto w-auto object-contain', className)}
+      className={cn('block object-contain', className)}
     />
   )
 }
