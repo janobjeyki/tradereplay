@@ -420,14 +420,20 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
     import('lightweight-charts').then(({ LineStyle }) => {
       if (!seriesRef.current) return
       openTrades.forEach(tr => {
+        const isPending  = tr.status === 'pending'
         const entryColor = tr.side === 'buy' ? TV_ENTRY_BUY : TV_ENTRY_SELL
+        const entryColorFaded = entryColor + (isPending ? '88' : 'ff')
 
         try {
           priceLines.current.set(`${tr.id}:entry`, seriesRef.current.createPriceLine({
             price: tr.entry_price,
-            color: entryColor,
-            lineWidth: 2, lineStyle: LineStyle.Solid,
-            axisLabelVisible: true, title: tr.side === 'buy' ? '▲ Buy' : '▼ Sell',
+            color: entryColorFaded,
+            lineWidth: isPending ? 1 : 2,
+            lineStyle: isPending ? LineStyle.Dashed : LineStyle.Solid,
+            axisLabelVisible: true,
+            title: isPending
+              ? (tr.side === 'buy' ? '⏳ Buy Pending' : '⏳ Sell Pending')
+              : (tr.side === 'buy' ? '▲ Buy' : '▼ Sell'),
           }))
         } catch {}
 
@@ -578,59 +584,75 @@ export const WorkspaceChart = forwardRef<ChartHandle, Props>(function WorkspaceC
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    const HIT = 14  // px proximity to grab a line
+
+    const getHitTarget = (y: number): 'sl' | 'tp' | 'entry' | null => {
+      if (!seriesRef.current) return null
+      const slC = previewSL    != null ? seriesRef.current.priceToCoordinate(previewSL)    : null
+      const tpC = previewTP    != null ? seriesRef.current.priceToCoordinate(previewTP)    : null
+      const eC  = previewEntry != null ? seriesRef.current.priceToCoordinate(previewEntry) : null
+      if (slC != null && Math.abs(slC - y) < HIT) return 'sl'
+      if (tpC != null && Math.abs(tpC - y) < HIT) return 'tp'
+      if (eC  != null && Math.abs(eC  - y) < HIT) return 'entry'
+      return null
+    }
+
+    // On hover: pre-disable chart pan so mousedown can't miss
+    const onHover = (e: MouseEvent) => {
+      if (previewDraggingRef.current) return  // already dragging
+      const rect = el.getBoundingClientRect()
+      const y    = e.clientY - rect.top
+      const hit  = getHitTarget(y)
+      if (hit) {
+        setCursorStyle('ns-resize')
+        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false }, handleScale: false })
+      } else {
+        if (!draggingRef.current) {
+          setCursorStyle('default')
+          chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true }, handleScale: true })
+        }
+      }
+    }
 
     const onDown = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('button')) return
-      if (!seriesRef.current) return
       const rect = el.getBoundingClientRect()
       const y    = e.clientY - rect.top
-      const slCoord    = previewSL    != null ? seriesRef.current.priceToCoordinate(previewSL)    : null
-      const tpCoord    = previewTP    != null ? seriesRef.current.priceToCoordinate(previewTP)    : null
-      const entryCoord = previewEntry != null ? seriesRef.current.priceToCoordinate(previewEntry) : null
-      if (slCoord != null && Math.abs(slCoord - y) < 12) {
-        previewDraggingRef.current = 'sl'
-        setCursorStyle('ns-resize')
-        e.preventDefault()
-        e.stopPropagation()
-        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
-      } else if (tpCoord != null && Math.abs(tpCoord - y) < 12) {
-        previewDraggingRef.current = 'tp'
-        setCursorStyle('ns-resize')
-        e.preventDefault()
-        e.stopPropagation()
-        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
-      } else if (entryCoord != null && Math.abs(entryCoord - y) < 12) {
-        previewDraggingRef.current = 'entry'
-        setCursorStyle('ns-resize')
-        e.preventDefault()
-        e.stopPropagation()
-        chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: false } })
-      }
+      const hit  = getHitTarget(y)
+      if (!hit) return
+      previewDraggingRef.current = hit
+      setHideCrosshair(true)
+      e.preventDefault()
+      e.stopPropagation()
     }
+
     const onMove = (e: MouseEvent) => {
       const dragging = previewDraggingRef.current
       if (!dragging || !seriesRef.current) return
       e.preventDefault()
-      setHideCrosshair(true)
       const rect  = el.getBoundingClientRect()
       const price = seriesRef.current.coordinateToPrice(e.clientY - rect.top)
       if (price == null) return
-      const normalizedPrice = normalizePreviewPrice(dragging, price)
-      if (dragging === 'sl')    onPreviewSL?.   (normalizedPrice)
-      if (dragging === 'tp')    onPreviewTP?.   (normalizedPrice)
+      const norm = normalizePreviewPrice(dragging, price)
+      if (dragging === 'sl')    onPreviewSL?.(norm)
+      if (dragging === 'tp')    onPreviewTP?.(norm)
       if (dragging === 'entry') onPreviewEntry?.(price)
     }
+
     const onUp = () => {
+      if (!previewDraggingRef.current) return
       previewDraggingRef.current = null
       setCursorStyle('default')
       setHideCrosshair(false)
-      chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true } })
+      chartRef.current?.applyOptions({ handleScroll: { pressedMouseMove: true }, handleScale: true })
     }
 
+    el.addEventListener('mousemove', onHover)
     el.addEventListener('mousedown', onDown, { capture: true })
     window.addEventListener('mousemove', onMove, { passive: false })
     window.addEventListener('mouseup',   onUp)
     return () => {
+      el.removeEventListener('mousemove', onHover)
       el.removeEventListener('mousedown', onDown, true)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup',   onUp)

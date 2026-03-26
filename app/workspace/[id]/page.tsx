@@ -76,6 +76,7 @@ export default function WorkspacePage() {
     setEntryVal('')
     setSlError('')
     setTpError('')
+    setTradeSide(null)
     if (nextOrderType) setOrderType(nextOrderType)
   }, [])
 
@@ -464,9 +465,28 @@ export default function WorkspacePage() {
 
   if (loading || !session) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4" style={{background:'var(--bg-primary)'}}>
-        <Spinner size="lg"/>
-        <p className="text-sm" style={{color:'var(--text-muted)'}}>{t('loading')}</p>
+      <div className="h-screen flex flex-col" style={{background:'var(--bg-primary)'}}>
+        {/* Top bar skeleton */}
+        <div className="flex items-center justify-between px-4 py-2.5 shrink-0" style={{borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
+          <div style={{display:'flex', gap:8, alignItems:'center'}}>
+            <div style={{width:100,height:16,borderRadius:6,background:'var(--bg-elevated)',animation:'pulse 1.5s ease-in-out infinite'}}/>
+            <div style={{width:60,height:16,borderRadius:6,background:'var(--bg-elevated)',animation:'pulse 1.5s ease-in-out infinite'}}/>
+          </div>
+          <div style={{width:140,height:28,borderRadius:8,background:'var(--bg-elevated)',animation:'pulse 1.5s ease-in-out infinite'}}/>
+        </div>
+        {/* Chart area skeleton */}
+        <div className="flex flex-1 overflow-hidden">
+          <div style={{flex:1,background:'var(--bg-primary)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12}}>
+            <Spinner size="lg"/>
+            <p className="text-sm" style={{color:'var(--text-muted)'}}>Loading chart data…</p>
+          </div>
+          {/* Right panel skeleton */}
+          <div style={{width:260,borderLeft:'1px solid var(--border-subtle)',background:'var(--bg-secondary)',padding:12,display:'flex',flexDirection:'column',gap:10}}>
+            {[80,40,40,100,100,50].map((w,i) => (
+              <div key={i} style={{height:36,borderRadius:8,background:'var(--bg-elevated)',width:`${w}%`,animation:'pulse 1.5s ease-in-out infinite'}}/>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }

@@ -314,33 +314,47 @@ export default function AnalyticsPage() {
 
 // ── Monthly bar chart ─────────────────────────────────────────────
 function MonthlyBarChart({ data }: { data: Record<string, number> }) {
-  const entries  = Object.entries(data).sort(([a], [b]) => a.localeCompare(b))
-  const maxAbs   = Math.max(...entries.map(([, v]) => Math.abs(v)), 1)
-  const labels   = entries.map(([k]) => {
-    const [y, m] = k.split('-')
-    return new Date(+y, +m - 1).toLocaleDateString('en-US', { month: 'short' })
-  })
+  const entries = Object.entries(data).sort(([a], [b]) => a.localeCompare(b))
+  if (entries.length === 0) return <NoData />
+  const maxAbs  = Math.max(...entries.map(([, v]) => Math.abs(v)), 1)
+  const CHART_H = 120  // usable bar area
+  const LABEL_H = 22
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 160, paddingBottom: 20, position: 'relative' }}>
-      {/* Zero line */}
-      <div style={{ position: 'absolute', bottom: 20, left: 0, right: 0, height: 1, background: 'var(--border-subtle)' }} />
-      {entries.map(([key, val], i) => {
-        const isPos   = val >= 0
-        const pct     = Math.abs(val) / maxAbs
-        const barH    = Math.max(4, pct * 100)
-        return (
-          <div key={key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, justifyContent: 'flex-end', height: '100%', paddingBottom: 20 }}>
-            <div style={{
-              width: '80%', height: barH,
-              background: isPos ? 'var(--green)' : 'var(--red)',
-              borderRadius: 3, opacity: 0.85,
-              alignSelf: 'flex-end',
-            }} title={`${labels[i]}: ${fmtMoney(val)}`} />
-            <span style={{ fontSize: 9, color: 'var(--text-muted)', position: 'absolute', bottom: 4 }}>{labels[i]}</span>
-          </div>
-        )
-      })}
+    <div style={{ position: 'relative', height: CHART_H + LABEL_H }}>
+      {/* Zero baseline */}
+      <div style={{ position: 'absolute', bottom: LABEL_H, left: 0, right: 0, height: 1, background: 'var(--border-subtle)' }} />
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: CHART_H, paddingBottom: 0 }}>
+        {entries.map(([key, val]) => {
+          const [y, m] = key.split('-')
+          const label  = new Date(+y, +m - 1).toLocaleDateString('en-US', { month: 'short' })
+          const isPos  = val >= 0
+          const barH   = Math.max(4, (Math.abs(val) / maxAbs) * (CHART_H - 4))
+          return (
+            <div key={key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+              <div
+                title={`${label}: ${fmtMoney(val)}`}
+                style={{
+                  width: '70%', height: barH, borderRadius: '3px 3px 0 0',
+                  background: isPos ? 'var(--green)' : 'var(--red)', opacity: 0.85,
+                }}
+              />
+            </div>
+          )
+        })}
+      </div>
+      {/* Labels row */}
+      <div style={{ display: 'flex', gap: 4, height: LABEL_H }}>
+        {entries.map(([key]) => {
+          const [y, m] = key.split('-')
+          const label  = new Date(+y, +m - 1).toLocaleDateString('en-US', { month: 'short' })
+          return (
+            <div key={key} style={{ flex: 1, textAlign: 'center' }}>
+              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{label}</span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
