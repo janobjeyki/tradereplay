@@ -75,36 +75,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Subscription */}
-        <div className="rounded-xl p-6 mb-4" style={cardStyle}>
-          <h2 className="font-bold text-base mb-5" style={{color:'var(--text-primary)'}}>Subscription</h2>
-          <div className="flex flex-col gap-3">
-            <div className="rounded-lg px-4 py-3" style={{ background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)' }}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>
-                    {profile?.subscription_plan ?? 'Starter'}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
-                    Status: {profile?.subscription_status ?? 'inactive'}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>
-                    ${Number(profile?.subscription_price ?? 0).toFixed(2)}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
-                    {profile?.payment_method ? 'Card linked' : 'No card linked'}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <p className="text-sm" style={{ color:'var(--text-muted)' }}>
-              An active subscription is required to create new sessions.
-            </p>
-          </div>
-        </div>
-
         {/* Password */}
         <div className="rounded-xl p-6 mb-4" style={cardStyle}>
           <h2 className="font-bold text-base mb-5" style={{color:'var(--text-primary)'}}>{t('changePassword')}</h2>

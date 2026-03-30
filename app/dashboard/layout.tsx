@@ -14,7 +14,6 @@ const NAV = [
   { href:'/dashboard/sessions',  label:'Sessions', sub:'Sessions and replay', icon: 'sessions' },
   { href:'/dashboard/strategy',  label:'Strategies', sub:'Your playbooks', icon: 'strategies' },
   { href:'/dashboard/analytics', label:'Analytics', sub:'Performance view', icon: 'analytics' },
-  { href:'/dashboard/subscription', label:'Subscription', sub:'Access and billing', icon: 'subscription' },
   { href:'/dashboard/settings',  label:'Settings', sub:'Theme and account', icon: 'settings' },
 ]
 
@@ -22,7 +21,6 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard/sessions': { title: 'Trading Dashboard', subtitle: 'Create sessions, control replay, and launch into the chart quickly.' },
   '/dashboard/strategy': { title: 'Strategy Library', subtitle: 'Organize ideas, compare systems, and track what really works.' },
   '/dashboard/analytics': { title: 'Performance Statistics', subtitle: 'Review equity, monthly performance, and recent trade behavior.' },
-  '/dashboard/subscription': { title: 'Subscription Center', subtitle: 'Manage card authorization and access status.' },
   '/dashboard/settings': { title: 'Account Settings', subtitle: 'Profile, password, language, and visual preferences live here.' },
 }
 
@@ -146,8 +144,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-sm mt-1 break-all" style={{ color:'var(--text-secondary)', overflowWrap:'anywhere' }}>{user?.email}</p>
               <div className="grid grid-cols-3 gap-3 mt-6 text-center">
                 <div>
-                  <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Plan</p>
-                  <p className="font-semibold mt-2">{profile?.subscription_plan ?? 'Starter'}</p>
+                  <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Workspace</p>
+                  <p className="font-semibold mt-2 capitalize">{workspaceLabel}</p>
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Mode</p>
@@ -163,14 +161,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="mt-6">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-[26px] leading-none">Desk Status</h3>
-                <Badge variant={profile?.subscription_status === 'active' ? 'green' : 'red'}>
-                  {profile?.subscription_status === 'active' ? 'Active' : 'Locked'}
-                </Badge>
+                <Badge variant="green">Ready</Badge>
               </div>
               <div className="mt-4 grid gap-3">
                 {[
-                  { label: 'Subscription', value: profile?.subscription_status ?? 'inactive' },
-                  { label: 'Card', value: profile?.payment_method ? 'Linked' : 'Not linked' },
+                  { label: 'Account', value: user?.email ? 'Signed in' : 'Guest' },
+                  { label: 'Sessions', value: 'Backtesting enabled' },
                   { label: 'Workspace', value: workspaceLabel },
                 ].map(item => (
                   <div key={item.label} className="glass-card rounded-2xl px-4 py-3.5">
@@ -204,7 +200,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-type NavIconName = 'sessions' | 'strategies' | 'analytics' | 'subscription' | 'settings'
+type NavIconName = 'sessions' | 'strategies' | 'analytics' | 'settings'
 
 function NavIcon({ name, active, theme }: { name: NavIconName; active: boolean; theme: 'dark' | 'light' }) {
   const color = active ? (theme === 'light' ? '#ff8dad' : 'var(--accent)') : theme === 'light' ? '#4e648c' : 'var(--text-secondary)'
@@ -230,14 +226,6 @@ function NavIcon({ name, active, theme }: { name: NavIconName; active: boolean; 
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M4 18h16M6 15l3-3 3 2 5-6 1 1" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M18 8h3v3" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      )
-    case 'subscription':
-      return (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="3.5" y="6" width="17" height="12" rx="2.5" stroke={color} strokeWidth="1.8"/>
-          <path d="M3.5 10h17" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
-          <path d="M7 15h3.5" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
         </svg>
       )
     case 'settings':

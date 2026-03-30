@@ -5,34 +5,18 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLang } from '@/contexts/LangContext'
-import type { Profile, Session, Strategy, SubscriptionTransaction } from '@/types'
+import type { Session, Strategy } from '@/types'
 import { Button, Badge, Spinner, Modal, Input, Alert } from '@/components/ui'
-import { SubscriptionManager } from '@/components/subscription/SubscriptionManager'
 
 export default function SessionsPage() {
   const PAGE_SIZE = 8
   const { t }    = useLang()
-  const { user, profile, refreshProfile } = useAuth()
+  const { user } = useAuth()
   const router   = useRouter()
   const [sessions,  setSessions]  = useState<Session[]>([])
   const [loading,   setLoading]   = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [showPaywall, setShowPaywall] = useState(false)
-  const [transactions, setTransactions] = useState<SubscriptionTransaction[]>([])
   const [page, setPage] = useState(1)
-
-  const hasActiveSubscription = profile?.subscription_status === 'active'
-  const subscriptionBadge = useMemo(() => (
-    hasActiveSubscription
-      ? {
-          variant: 'green' as const,
-          text: `${profile?.subscription_plan ?? 'Starter'} · $${Number(profile?.subscription_price ?? 0).toFixed(2)}`,
-        }
-      : {
-          variant: 'red' as const,
-          text: 'Subscription required',
-        }
-  ), [hasActiveSubscription, profile?.subscription_plan, profile?.subscription_price])
 
   const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE))
   const pagedSessions = useMemo(() => {
@@ -43,7 +27,6 @@ export default function SessionsPage() {
   useEffect(() => {
     if (user) {
       fetchSessions()
-      fetchTransactions()
     }
   }, [user])
 
@@ -58,14 +41,6 @@ export default function SessionsPage() {
     setLoading(false)
   }
 
-  async function fetchTransactions() {
-    const { data } = await createClient()
-      .from('subscription_transactions')
-      .select('*')
-      .order('created_at', { ascending: false })
-    setTransactions((data as SubscriptionTransaction[]) ?? [])
-  }
-
   async function deleteSession(sessionId: string) {
     if (!confirm('Are you sure you want to delete this session? This cannot be undone.')) return
     
@@ -74,13 +49,7 @@ export default function SessionsPage() {
     fetchSessions()
   }
 
-  const openCreateFlow = () => {
-    if (!hasActiveSubscription) {
-      setShowPaywall(true)
-      return
-    }
-    setShowModal(true)
-  }
+  const openCreateFlow = () => setShowModal(true)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -91,12 +60,9 @@ export default function SessionsPage() {
           <h1 className="font-black text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>
             {t('sessions')}
           </h1>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              {sessions.length} session{sessions.length !== 1 ? 's' : ''}
-            </p>
-            <Badge variant={subscriptionBadge.variant}>{subscriptionBadge.text}</Badge>
-          </div>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+          </p>
         </div>
         <Button variant="primary" size="lg" onClick={openCreateFlow}>
           <span className="text-lg leading-none mr-0.5">+</span>{t('newSession')}
@@ -221,21 +187,6 @@ export default function SessionsPage() {
         <CreateSessionModal
           onClose={() => setShowModal(false)}
           onCreate={(sessionId) => { setShowModal(false); router.push(`/workspace/${sessionId}`) }}
-        />
-      )}
-
-      {showPaywall && (
-        <SubscriptionModal
-          profile={profile}
-          userId={user?.id ?? ''}
-          transactions={transactions}
-          onClose={() => setShowPaywall(false)}
-          onActivated={async () => {
-            await refreshProfile()
-            await fetchTransactions()
-            setShowPaywall(false)
-            setShowModal(true)
-          }}
         />
       )}
     </div>
@@ -364,26 +315,6 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
           </Button>
         </div>
       </div>
-    </Modal>
-  )
-}
-
-function SubscriptionModal({
-  profile,
-  userId,
-  transactions,
-  onClose,
-  onActivated,
-}: {
-  profile: Profile | null
-  userId: string
-  transactions: SubscriptionTransaction[]
-  onClose: () => void
-  onActivated: () => void | Promise<void>
-}) {
-  return (
-    <Modal open title="Activate Subscription" onClose={onClose} width="max-w-lg">
-      <SubscriptionManager profile={profile} userId={userId} transactions={transactions} compact onActivated={onActivated} />
     </Modal>
   )
 }
