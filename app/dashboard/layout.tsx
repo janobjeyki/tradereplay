@@ -22,7 +22,7 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard/sessions': { title: 'Trading Dashboard', subtitle: 'Create sessions, control replay, and launch into the chart quickly.' },
   '/dashboard/strategy': { title: 'Strategy Library', subtitle: 'Organize ideas, compare systems, and track what really works.' },
   '/dashboard/analytics': { title: 'Performance Statistics', subtitle: 'Review equity, monthly performance, and recent trade behavior.' },
-  '/dashboard/subscription': { title: 'Subscription Center', subtitle: 'Manage Uzum Checkout card binding and access status.' },
+  '/dashboard/subscription': { title: 'Subscription Center', subtitle: 'Manage card authorization and access status.' },
   '/dashboard/settings': { title: 'Account Settings', subtitle: 'Profile, password, language, and visual preferences live here.' },
 }
 
@@ -170,7 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="mt-4 grid gap-3">
                 {[
                   { label: 'Subscription', value: profile?.subscription_status ?? 'inactive' },
-                  { label: 'Payment', value: profile?.payment_method ? String(profile.payment_method).toUpperCase() : 'Not linked' },
+                  { label: 'Card', value: profile?.payment_method ? 'Linked' : 'Not linked' },
                   { label: 'Workspace', value: workspaceLabel },
                 ].map(item => (
                   <div key={item.label} className="glass-card rounded-2xl px-4 py-3.5">

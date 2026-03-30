@@ -27,7 +27,7 @@ function getConfig(): UzumConfig {
   const siteUrl = process.env.UZUM_CHECKOUT_SITE_URL?.trim()
 
   if (!apiUrl || !apiKey || !terminalId || !siteUrl) {
-    throw new Error('Missing Uzum Checkout configuration. Set UZUM_CHECKOUT_API_URL, UZUM_CHECKOUT_API_KEY, UZUM_CHECKOUT_TERMINAL_ID, and UZUM_CHECKOUT_SITE_URL.')
+    throw new Error('Payment service is not configured yet. Please try again later or contact support.')
   }
 
   return { apiUrl, apiKey, terminalId, siteUrl }
@@ -50,7 +50,7 @@ async function callUzum<T>(path: string, body: Record<string, unknown>): Promise
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message = payload?.message || payload?.error || `Uzum Checkout request failed with ${response.status}`
+    const message = payload?.message || payload?.error || `Payment request failed with ${response.status}`
     throw new Error(message)
   }
 

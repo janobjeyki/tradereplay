@@ -94,7 +94,7 @@ export default function SettingsPage() {
                     ${Number(profile?.subscription_price ?? 0).toFixed(2)}
                   </p>
                   <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
-                    {profile?.payment_method ? `via ${String(profile.payment_method).toUpperCase()}` : 'No payment method'}
+                    {profile?.payment_method ? 'Card linked' : 'No card linked'}
                   </p>
                 </div>
               </div>

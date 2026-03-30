@@ -24,9 +24,15 @@ create table if not exists public.subscription_transactions (
 
 alter table public.subscription_transactions enable row level security;
 
+drop policy if exists "Users can read own subscription transactions"
+  on public.subscription_transactions;
+
 create policy "Users can read own subscription transactions"
   on public.subscription_transactions for select
   using (auth.uid() = user_id);
+
+drop policy if exists "Users can create own subscription transactions"
+  on public.subscription_transactions;
 
 create policy "Users can create own subscription transactions"
   on public.subscription_transactions for insert

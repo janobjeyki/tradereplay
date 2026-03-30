@@ -7,9 +7,9 @@ import { Alert, Badge, Button } from '@/components/ui'
 export type PaymentMethod = 'humo' | 'uzcard' | 'visa'
 
 const PAYMENT_METHODS: Array<{ id: PaymentMethod; label: string; note: string }> = [
-  { id: 'humo', label: 'Humo', note: 'Bind a HUMO card through Uzum Checkout' },
-  { id: 'uzcard', label: 'Uzcard', note: 'Bind an Uzcard through Uzum Checkout' },
-  { id: 'visa', label: 'Visa', note: 'Bind a Visa card through Uzum Checkout' },
+  { id: 'humo', label: 'Humo', note: 'Use a HUMO card for authorization' },
+  { id: 'uzcard', label: 'Uzcard', note: 'Use an Uzcard for authorization' },
+  { id: 'visa', label: 'Visa', note: 'Use a Visa card for authorization' },
 ]
 
 const STORAGE_KEY = 'subscription_pending_authorization'
@@ -76,7 +76,7 @@ export function SubscriptionManager({
       void checkAuthorizationStatus(pending.reference, true)
     }
     if (authorizationState === 'failed') {
-      setError('Uzum Checkout did not complete the card binding. Please try again.')
+      setError('Card authorization was not completed. Please try again.')
     }
   }, [])
 
@@ -93,7 +93,7 @@ export function SubscriptionManager({
 
     const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error || 'Failed to start Uzum Checkout')
+      setError(payload.error || 'Failed to start card authorization')
       setSaving(false)
       return
     }
@@ -101,7 +101,7 @@ export function SubscriptionManager({
     setPendingReference(payload.reference)
     setPendingMethod(paymentMethod)
     persistPendingAuthorization(payload.reference, paymentMethod)
-    setMessage(`Redirecting to Uzum Checkout. A temporary verification charge of ${Number(payload.verificationAmount) / 100} ${payload.verificationCurrency} may be used by the provider to bind your card.`)
+    setMessage(`Redirecting to the secure payment page. A temporary verification charge of ${Number(payload.verificationAmount) / 100} ${payload.verificationCurrency} may be used to authorize your card.`)
     window.location.assign(payload.redirectUrl)
   }
 
@@ -130,7 +130,7 @@ export function SubscriptionManager({
       clearPendingAuthorization()
       setPendingReference('')
       setPendingMethod(null)
-      setMessage('Subscription activated and card bound successfully through Uzum Checkout.')
+      setMessage('Subscription activated and card authorized successfully.')
       await onActivated?.()
     } else if (status === 'failed' || status === 'canceled') {
       clearPendingAuthorization()
@@ -138,7 +138,7 @@ export function SubscriptionManager({
       setPendingMethod(null)
       if (!silent) setError('Card binding was not completed. Please try again.')
     } else if (!silent) {
-      setMessage('Binding is still pending in Uzum Checkout. Complete the provider page and check again.')
+      setMessage('Authorization is still pending. Complete the payment page and check again.')
     }
 
     setCheckingStatus(false)
@@ -179,7 +179,7 @@ export function SubscriptionManager({
             <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>Starter Access</p>
             <h3 className="text-xl font-black mt-1" style={{ color: 'var(--text-primary)' }}>$0 for now</h3>
             <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
-              Cards are now linked through Uzum Checkout&apos;s hosted page. Session creation stays locked until the card binding finishes successfully.
+              Cards are linked on a secure payment page. Session creation stays locked until authorization finishes successfully.
             </p>
           </div>
           <Badge variant={isActive ? 'green' : 'red'}>
@@ -230,9 +230,9 @@ export function SubscriptionManager({
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--accent-border)' }}>
           <div className="flex flex-col gap-3">
             <div>
-              <p className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Pending Uzum Binding</p>
+              <p className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Pending Authorization</p>
               <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-                Finish the Uzum Checkout flow, then come back here and confirm the binding status.
+                Finish the payment flow, then come back here and confirm the authorization status.
               </p>
             </div>
             <div className="flex justify-end">
@@ -246,7 +246,7 @@ export function SubscriptionManager({
 
       <div className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Card details are collected on Uzum Checkout&apos;s hosted payment page, not inside this app. For card binding, Uzum may place a small temporary verification amount instead of a true zero-value authorization.
+          Card details are collected on a secure payment page, not inside this app. A small temporary verification amount may be used instead of a true zero-value authorization.
         </p>
       </div>
 
@@ -285,7 +285,7 @@ export function SubscriptionManager({
           </Button>
         )}
         <Button variant="primary" loading={saving} onClick={activateSubscription}>
-          {isActive ? 'Rebind Card in Uzum' : 'Bind Card with Uzum'}
+          {isActive ? 'Reauthorize Card' : 'Authorize Card'}
         </Button>
       </div>
     </div>

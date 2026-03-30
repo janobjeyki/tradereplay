@@ -33,7 +33,7 @@ export default function SubscriptionPage() {
       <div className="px-7 py-5 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <h1 className="font-black text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>Subscription</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-          Manage your plan, Uzum Checkout card binding, and subscription authorizations.
+          Manage your plan, card authorization, and subscription access.
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-7 py-6 max-w-3xl">
