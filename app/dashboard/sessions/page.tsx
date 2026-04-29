@@ -11,12 +11,14 @@ import { Button, Badge, Spinner, Modal, Input, Alert } from '@/components/ui'
 export default function SessionsPage() {
   const PAGE_SIZE = 8
   const { t }    = useLang()
-  const { user } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
   const router   = useRouter()
   const [sessions,  setSessions]  = useState<Session[]>([])
   const [loading,   setLoading]   = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [accessError, setAccessError] = useState('')
   const [page, setPage] = useState(1)
+  const hasActiveSubscription = profile?.subscription_status === 'active'
 
   const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE))
   const pagedSessions = useMemo(() => {
@@ -49,7 +51,15 @@ export default function SessionsPage() {
     fetchSessions()
   }
 
-  const openCreateFlow = () => setShowModal(true)
+  function openCreateFlow() {
+    if (authLoading) return
+    if (!hasActiveSubscription) {
+      setAccessError('Subscription required to create replay sessions. Activate billing or ask an admin to gift access.')
+      return
+    }
+    setAccessError('')
+    setShowModal(true)
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -64,13 +74,23 @@ export default function SessionsPage() {
             {sessions.length} session{sessions.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button variant="primary" size="lg" onClick={openCreateFlow}>
+        <Button variant="primary" size="lg" disabled={authLoading} onClick={openCreateFlow}>
           <span className="text-lg leading-none mr-0.5">+</span>{t('newSession')}
         </Button>
       </div>
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-7 py-5">
+        {accessError && (
+          <div className="mb-5 rounded-2xl p-4" style={{ background: 'var(--red-muted)', border: '1px solid rgba(255,107,149,0.2)' }}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm font-medium" style={{ color: 'var(--red)' }}>{accessError}</p>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/subscription')}>
+                Open Subscription
+              </Button>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center h-40"><Spinner /></div>
         ) : sessions.length === 0 ? (
@@ -217,6 +237,13 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
   const tradingDays = Math.round(totalDays * 5 / 7)
   const estCandles  = Math.round(tradingDays * 390)
 
+  function createSessionError(message: string) {
+    if (message.toLowerCase().includes('row-level security')) {
+      return 'Subscription required to create replay sessions. Activate billing or ask an admin to gift access.'
+    }
+    return message
+  }
+
   async function handleCreate() {
     if (!name.trim())         { setError(t('fillAllFields')); return }
     if (parseFloat(cap) <= 0) { setError(t('capitalPositive')); return }
@@ -233,9 +260,10 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
       candle_index:  0,
       strategy_id:   strategyId || null,
     }).select()
-    if (err) { setError(err.message); setSaving(false); return }
+    if (err) { setError(createSessionError(err.message)); setSaving(false); return }
     const sessionId = (data?.[0] as any)?.id
     if (sessionId) onCreate(sessionId)
+    else setSaving(false)
   }
 
   return (
