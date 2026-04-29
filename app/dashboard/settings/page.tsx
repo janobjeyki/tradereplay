@@ -55,7 +55,7 @@ export default function SettingsPage() {
             <Select label={t('language')} value={lang} onChange={e=>setLang(e.target.value as Language)}>
               <option value="en">EN — English</option>
               <option value="ru">RU — Русский</option>
-              <option value="uz">UZ — O'zbek</option>
+              <option value="uz">UZ — O&apos;zbek</option>
             </Select>
 
             {/* Theme toggle row */}
@@ -72,6 +72,41 @@ export default function SettingsPage() {
             </div>
 
             <Button variant="primary" className="w-fit" loading={saving} onClick={saveProfile}>{t('saveChanges')}</Button>
+          </div>
+        </div>
+
+        <div className="rounded-xl p-6 mb-4" style={cardStyle}>
+          <h2 className="font-bold text-base mb-5" style={{color:'var(--text-primary)'}}>Subscription</h2>
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg px-4 py-3" style={{ background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>
+                    {profile?.subscription_plan ?? 'Starter'}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
+                    Status: {profile?.subscription_status ?? 'inactive'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>
+                    {Number(profile?.subscription_price ?? 0).toLocaleString()} UZS
+                  </p>
+                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
+                    {profile?.payment_method ? `Click / ${String(profile.payment_method).toUpperCase()}` : 'No payment method'}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
+                    {profile?.subscription_expires_at ? `Renews ${new Date(profile.subscription_expires_at).toLocaleDateString()}` : 'No renewal date'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p className="text-sm" style={{ color:'var(--text-muted)' }}>
+              An active subscription is required to create new sessions.
+            </p>
+            <Button variant="ghost" className="w-fit" onClick={() => router.push('/dashboard/subscription')}>
+              Manage Subscription
+            </Button>
           </div>
         </div>
 

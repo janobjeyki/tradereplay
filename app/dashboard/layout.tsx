@@ -14,14 +14,19 @@ const NAV = [
   { href:'/dashboard/sessions',  label:'Sessions', sub:'Sessions and replay', icon: 'sessions' },
   { href:'/dashboard/strategy',  label:'Strategies', sub:'Your playbooks', icon: 'strategies' },
   { href:'/dashboard/analytics', label:'Analytics', sub:'Performance view', icon: 'analytics' },
+  { href:'/dashboard/subscription', label:'Subscription', sub:'Access and billing', icon: 'subscription' },
   { href:'/dashboard/settings',  label:'Settings', sub:'Theme and account', icon: 'settings' },
 ]
+
+const ADMIN_EMAILS = ['bekhruzjke@gmail.com']
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard/sessions': { title: 'Trading Dashboard', subtitle: 'Create sessions, control replay, and launch into the chart quickly.' },
   '/dashboard/strategy': { title: 'Strategy Library', subtitle: 'Organize ideas, compare systems, and track what really works.' },
   '/dashboard/analytics': { title: 'Performance Statistics', subtitle: 'Review equity, monthly performance, and recent trade behavior.' },
+  '/dashboard/subscription': { title: 'Subscription Center', subtitle: 'Manage Click card binding and access status.' },
   '/dashboard/settings': { title: 'Account Settings', subtitle: 'Profile, password, language, and visual preferences live here.' },
+  '/dashboard/admin': { title: 'Admin Panel', subtitle: 'Manage users, gift access, extend subscriptions, and inspect payments.' },
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -47,6 +52,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     title: 'BackTest Dashboard',
     subtitle: 'A focused control room for replay, analytics, and account access.',
   }
+  const isAdmin = ADMIN_EMAILS.includes((user?.email || '').toLowerCase())
+  const navItems = isAdmin
+    ? [...NAV, { href:'/dashboard/admin', label:'Admin', sub:'Users and access', icon: 'admin' }]
+    : NAV
 
   const workspaceLabel = pathname.replace('/dashboard/', '') || 'sessions'
 
@@ -65,7 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <nav className="flex-1 px-4">
               <div className="flex flex-col gap-2.5">
-                {NAV.map(item => {
+                {navItems.map(item => {
                   const active = pathname.startsWith(item.href)
                   return (
                     <Link
@@ -144,8 +153,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-sm mt-1 break-all" style={{ color:'var(--text-secondary)', overflowWrap:'anywhere' }}>{user?.email}</p>
               <div className="grid grid-cols-3 gap-3 mt-6 text-center">
                 <div>
-                  <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Workspace</p>
-                  <p className="font-semibold mt-2 capitalize">{workspaceLabel}</p>
+                  <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Plan</p>
+                  <p className="font-semibold mt-2">{profile?.subscription_plan ?? 'Starter'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Mode</p>
@@ -161,12 +170,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="mt-6">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-[26px] leading-none">Desk Status</h3>
-                <Badge variant="green">Ready</Badge>
+                <Badge variant={profile?.subscription_status === 'active' ? 'green' : 'red'}>
+                  {profile?.subscription_status === 'active' ? 'Active' : 'Locked'}
+                </Badge>
               </div>
               <div className="mt-4 grid gap-3">
                 {[
-                  { label: 'Account', value: user?.email ? 'Signed in' : 'Guest' },
-                  { label: 'Sessions', value: 'Backtesting enabled' },
+                  { label: 'Subscription', value: profile?.subscription_status ?? 'inactive' },
+                  { label: 'Payment', value: profile?.payment_method ? String(profile.payment_method).toUpperCase() : 'Not linked' },
                   { label: 'Workspace', value: workspaceLabel },
                 ].map(item => (
                   <div key={item.label} className="glass-card rounded-2xl px-4 py-3.5">
@@ -200,7 +211,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 }
 
-type NavIconName = 'sessions' | 'strategies' | 'analytics' | 'settings'
+type NavIconName = 'sessions' | 'strategies' | 'analytics' | 'subscription' | 'settings' | 'admin'
 
 function NavIcon({ name, active, theme }: { name: NavIconName; active: boolean; theme: 'dark' | 'light' }) {
   const color = active ? (theme === 'light' ? '#ff8dad' : 'var(--accent)') : theme === 'light' ? '#4e648c' : 'var(--text-secondary)'
@@ -228,11 +239,26 @@ function NavIcon({ name, active, theme }: { name: NavIconName; active: boolean; 
           <path d="M18 8h3v3" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       )
+    case 'subscription':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="6" width="17" height="12" rx="2.5" stroke={color} strokeWidth="1.8"/>
+          <path d="M3.5 10h17" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
+          <path d="M7 15h3.5" stroke={color} strokeWidth="1.8" strokeLinecap="round"/>
+        </svg>
+      )
     case 'settings':
       return (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 8.7A3.3 3.3 0 1 0 12 15.3A3.3 3.3 0 1 0 12 8.7Z" stroke={color} strokeWidth="1.8"/>
           <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1.8 1.8 0 0 1 0 2.5 1.8 1.8 0 0 1-2.5 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1.8 1.8 0 0 1-3.6 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.8 1.8 0 0 1-2.5 0 1.8 1.8 0 0 1 0-2.5l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a1.8 1.8 0 0 1 0-3.6h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.8 1.8 0 0 1 0-2.5 1.8 1.8 0 0 1 2.5 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1.8 1.8 0 0 1 3.6 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.8 1.8 0 0 1 2.5 0 1.8 1.8 0 0 1 0 2.5l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a1.8 1.8 0 0 1 0 3.6h-.2a1 1 0 0 0-.9.6Z" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )
+    case 'admin':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3l7 3v5c0 4.2-2.8 7.9-7 10-4.2-2.1-7-5.8-7-10V6l7-3Z" stroke={color} strokeWidth="1.7" strokeLinejoin="round"/>
+          <path d="M9 12l2 2 4-4" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       )
   }

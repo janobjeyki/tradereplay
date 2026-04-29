@@ -23,9 +23,9 @@ export default function LandingPage() {
           </div>
 
           <div className="hidden md:flex items-center gap-7 text-sm font-medium" style={{color:'var(--text-secondary)'}}>
-            {(['about','pricing','blog','contact'] as const).map(k => (
-              <span key={k} className="cursor-pointer transition-colors hover:text-[var(--text-primary)]">{t(k)}</span>
-            ))}
+            <a href="#about" className="transition-colors hover:text-[var(--text-primary)]">{t('about')}</a>
+            <a href="#pricing" className="transition-colors hover:text-[var(--text-primary)]">{t('pricing')}</a>
+            <Link href="/support" className="transition-colors hover:text-[var(--text-primary)]">{t('contact')}</Link>
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0">
@@ -111,7 +111,7 @@ export default function LandingPage() {
       </section>
 
       {/* Features */}
-      <section className="px-10 py-16 max-w-5xl mx-auto w-full">
+      <section id="about" className="px-10 py-16 max-w-5xl mx-auto w-full">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
             {e:'📊', t1:t('feat1Title'), d:t('feat1Desc')},
@@ -127,9 +127,32 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section id="pricing" className="px-10 pb-16 max-w-5xl mx-auto w-full">
+        <div className="rounded-2xl p-7" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
+          <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>Starter</p>
+          <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-3xl font-black">99,000 UZS / month</h2>
+              <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Candle replay, saved sessions, trade journal, strategy checklists, and analytics.
+              </p>
+            </div>
+            <Link href="/auth/register" className="inline-flex rounded-xl px-5 py-3 text-sm font-bold text-white" style={{ background: 'var(--accent)' }}>
+              Start Practice
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <footer className="px-10 py-5 flex justify-between items-center flex-wrap gap-3" style={{borderTop:'1px solid var(--border-subtle)'}}>
         <span className="font-black" style={{color:'var(--text-secondary)'}}>TradeLab</span>
-        <span className="text-xs" style={{color:'var(--text-muted)'}}>Powered by Dukascopy historical tick data</span>
+        <div className="flex flex-wrap items-center gap-4 text-xs" style={{color:'var(--text-muted)'}}>
+          <span>Powered by Dukascopy historical tick data</span>
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/refund-policy">Refunds</Link>
+          <Link href="/support">Support</Link>
+        </div>
       </footer>
     </div>
   )

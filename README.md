@@ -15,6 +15,7 @@ Candle-by-candle trading simulator — **Next.js 14** (App Router) + **Supabase*
 | Charts      | TradingView `lightweight-charts` v4         |
 | Market Data | Dukascopy XAUUSD M1 CSV (real tick data)    |
 | Deployment  | Vercel (recommended)                        |
+| Payments    | Click Merchant API                          |
 
 ---
 
@@ -102,23 +103,39 @@ npm install
 ### 3. Environment variables
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
 Fill in `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+NEXT_PUBLIC_APP_URL=https://tradelab.uz
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+CRON_SECRET=replace-with-a-long-random-secret
+ADMIN_EMAILS=bekhruzjke@gmail.com
+
+CLICK_API_URL=https://api.click.uz/v2/merchant
+CLICK_SERVICE_ID=your-click-service-id
+CLICK_MERCHANT_ID=your-click-merchant-id
+CLICK_MERCHANT_USER_ID=your-click-merchant-user-id
+CLICK_SECRET_KEY=your-click-secret-key
+CLICK_SUBSCRIPTION_AMOUNT_UZS=99000
 ```
 
 Found at: Supabase → **Project Settings → API**
 
+Click values come from your Click Business/Merchant cabinet. The suggested starter price is `99000` UZS per month. Keep `CLICK_SUBSCRIPTION_AMOUNT_UZS=0` only for a free trial/card-verification launch.
+
+`ADMIN_EMAILS` is a comma-separated allowlist for `/dashboard/admin`. The first production admin is `bekhruzjke@gmail.com`.
+
 ### 4. Supabase Auth settings
 
 In Supabase → **Authentication → URL Configuration**:
-- Site URL: `http://localhost:3000`
-- Redirect URLs: `http://localhost:3000/auth/verify`
+- Site URL: `https://tradelab.uz`
+- Redirect URLs: `https://tradelab.uz/auth/verify`
+
+For local development, also add `http://localhost:3000/auth/verify` to Redirect URLs.
 
 ### 5. Run
 
@@ -168,3 +185,31 @@ npm run build
 ```
 
 Push to GitHub → connect to [Vercel](https://vercel.com). Add the same env vars in Vercel dashboard.
+
+Before public launch:
+- Run every Supabase migration in `supabase/migrations` in order.
+- In Supabase Auth, set the production Site URL and `/auth/verify` redirect URL.
+- In Click Business, configure the production merchant credentials and callback/return URLs for your deployed domain.
+- Rotate any credentials that were ever committed or shared.
+- Add `CRON_SECRET` in Vercel. Vercel Cron calls `/api/subscription/renew` daily; the endpoint renews subscriptions whose expiry date has arrived.
+
+## Production Operations
+
+### Supabase Auth emails
+
+In Supabase Dashboard → Authentication → Email Templates:
+- Update the confirmation email subject to include TradeLab.
+- Keep the confirmation link token provided by Supabase in the template.
+- Use support contact `@tradelabuz_bot`.
+- Send users back to `https://tradelab.uz/auth/verify`.
+
+### Backups
+
+In Supabase Dashboard → Project Settings → Database → Backups:
+- Confirm automatic backups are enabled for the production project.
+- Before major schema changes, create a manual backup or export.
+- Keep migrations in `supabase/migrations` as the source of truth for schema history.
+
+### Renewals
+
+Vercel Cron runs `/api/subscription/renew` daily at 02:00 UTC. It charges active users whose `subscription_expires_at` is due, creates a `subscription_transactions` row, and extends access by one month after a successful Click payment.
