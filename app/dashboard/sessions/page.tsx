@@ -224,9 +224,10 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
   const [ed,         setEd]         = useState(new Date().toISOString().slice(0, 10))
   const [error,      setError]      = useState('')
   const [saving,     setSaving]     = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [strategyId, setStrategyId] = useState<string>('')
-  const [availableSymbols, setAvailableSymbols] = useState<{symbol:string;start:string;end:string}[]>([])
+  const [availableSymbols, setAvailableSymbols] = useState<{symbol:string;start:string;end:string;downloaded:boolean}[]>([])
 
   useEffect(() => {
     if (user) {
@@ -238,7 +239,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
 
   useEffect(() => {
     fetch('/api/data/available').then(r => r.json()).then((body) => {
-      const list = (body?.symbols ?? []) as {symbol:string;start:string;end:string}[]
+      const list = (body?.symbols ?? []) as {symbol:string;start:string;end:string;downloaded:boolean}[]
       setAvailableSymbols(list)
       if (list.length) {
         const hit = list.find(x => x.symbol === symbol) ?? list[0]
@@ -272,6 +273,23 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
     if (parseFloat(cap) <= 0) { setError(t('capitalPositive')); return }
     if (sd >= ed)             { setError(t('dateRangeInvalid')); return }
     setSaving(true); setError('')
+    const selected = availableSymbols.find(x => x.symbol === symbol)
+    if (selected && !selected.downloaded) {
+      setDownloading(true)
+      const ensure = await fetch('/api/data/ensure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol }),
+      })
+      setDownloading(false)
+      if (!ensure.ok) {
+        const body = await ensure.json().catch(() => ({} as any))
+        setError(body?.error ?? 'Failed to download market data')
+        setSaving(false)
+        return
+      }
+      setAvailableSymbols(prev => prev.map(item => item.symbol === symbol ? ({ ...item, downloaded: true }) : item))
+    }
     const { data, error: err } = await createClient().from('sessions').insert({
       user_id:       user!.id,
       name:          name.trim(),
@@ -321,7 +339,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             className="w-full rounded-lg px-3 py-2 text-sm outline-none"
             style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
             {availableSymbols.length ? availableSymbols.map(item => (
-              <option key={item.symbol} value={item.symbol}>{item.symbol}</option>
+              <option key={item.symbol} value={item.symbol}>{item.symbol}{item.downloaded ? '' : ' (download on first use)'}</option>
             )) : <option value="XAUUSD">XAUUSD</option>}
           </select>
         </div>
@@ -372,7 +390,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
 
         <div className="flex gap-3 pt-1">
           <Button variant="ghost" className="flex-1" onClick={onClose}>{t('cancelBtn')}</Button>
-          <Button variant="primary" className="flex-[2]" loading={saving} onClick={handleCreate}>
+          <Button variant="primary" className="flex-[2]" loading={saving || downloading} onClick={handleCreate}>
             {t('createBtn')}
           </Button>
         </div>
