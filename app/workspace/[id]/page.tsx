@@ -8,7 +8,7 @@ import { useLang } from '@/contexts/LangContext'
 import type { Session, Trade, Candle, Symbol, Strategy } from '@/types'
 import type { TimeFrame } from '@/lib/loadCsvData'
 import { getSymbol } from '@/data/symbols'
-import { loadXauUsdData, aggregateCandles } from '@/lib/loadCsvData'
+import { aggregateCandles } from '@/lib/loadCsvData'
 import { calcPnl, checkPendingEntry, checkSlTp, fmtPrice, fmtMoney, interpolateDate, cn } from '@/lib/utils'
 import { Spinner, Badge, TabBar } from '@/components/ui'
 import { WorkspaceChart, type ChartHandle } from '@/components/chart/WorkspaceChart'
@@ -123,9 +123,17 @@ export default function WorkspacePage() {
     setBalance(s.end_capital)
     symRef.current = getSymbol(s.symbol)
 
-    let m1: Candle[]
-    try { m1 = await loadXauUsdData() }
-    catch {
+    let m1: Candle[] = []
+    try {
+      const params = new URLSearchParams({ symbol: s.symbol, start: s.start_date, end: s.end_date })
+      const res = await fetch(`/api/candles?${params.toString()}`)
+      if (res.ok) {
+        const body = await res.json()
+        m1 = (body?.candles as Candle[]) ?? []
+      }
+    } catch {}
+
+    if (!m1.length) {
       const { data: cache } = await supabase.from('candle_cache').select('candles').eq('session_id', id).single()
       m1 = (cache?.candles as Candle[]) ?? []
     }
