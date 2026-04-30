@@ -27,6 +27,7 @@ export function AdminPanel() {
   const [saving, setSaving] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [syncingData, setSyncingData] = useState(false)
 
   const selected = useMemo(
     () => users.find(item => item.id === selectedId) || users[0] || null,
@@ -59,6 +60,22 @@ export function AdminPanel() {
     return `${action}-${months ?? (lifetime ? 'lifetime' : 'default')}`
   }
 
+
+
+  async function syncAllMarketData() {
+    setSyncingData(true)
+    setError('')
+    setMessage('')
+    const response = await fetch('/api/admin/data/sync', { method: 'POST' })
+    const payload = await response.json().catch(() => ({} as any))
+    if (!response.ok) {
+      setError(payload.error || 'Failed to sync market data')
+      setSyncingData(false)
+      return
+    }
+    setMessage(`Market data synced from ${payload.start} to ${payload.end} for ${payload.symbols?.length || 0} symbols.`)
+    setSyncingData(false)
+  }
   async function updateSubscription(action: 'gift' | 'extend' | 'cancel', months?: number, lifetime = false) {
     if (!selected) return
     setSaving(savingKey(action, months, lifetime))
@@ -161,6 +178,18 @@ export function AdminPanel() {
                 <Info label="Payment" value={selected.profile?.payment_method ? selected.profile.payment_method.toUpperCase() : 'none'} />
                 <Info label="Card" value={selected.profile?.card_last4 ? `•••• ${selected.profile.card_last4}` : 'none'} />
                 <Info label="Sessions" value={String(selected.sessions_count)} />
+              </div>
+
+              <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+                <h3 className="font-bold">Market Data Sync</h3>
+                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Replace all Forex + Gold Dukascopy H1 data from 2010-01-01 up to the moment you click sync.
+                </p>
+                <div className="mt-3">
+                  <Button variant="primary" loading={syncingData} onClick={syncAllMarketData}>
+                    Sync All Market Data
+                  </Button>
+                </div>
               </div>
 
               <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
