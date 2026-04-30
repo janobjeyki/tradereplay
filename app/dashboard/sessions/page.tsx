@@ -219,12 +219,14 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
   const { user } = useAuth()
   const [name,       setName]       = useState('')
   const [cap,        setCap]        = useState('10000')
-  const [sd,         setSd]         = useState('2025-01-01')
-  const [ed,         setEd]         = useState('2025-12-31')
+  const [symbol,     setSymbol]     = useState('XAUUSD')
+  const [sd,         setSd]         = useState('2010-01-01')
+  const [ed,         setEd]         = useState(new Date().toISOString().slice(0, 10))
   const [error,      setError]      = useState('')
   const [saving,     setSaving]     = useState(false)
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [strategyId, setStrategyId] = useState<string>('')
+  const [availableSymbols, setAvailableSymbols] = useState<{symbol:string;start:string;end:string}[]>([])
 
   useEffect(() => {
     if (user) {
@@ -232,6 +234,27 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
         .then(({ data }) => setStrategies((data as Strategy[]) ?? []))
     }
   }, [user])
+
+
+  useEffect(() => {
+    fetch('/api/data/available').then(r => r.json()).then((body) => {
+      const list = (body?.symbols ?? []) as {symbol:string;start:string;end:string}[]
+      setAvailableSymbols(list)
+      if (list.length) {
+        const hit = list.find(x => x.symbol === symbol) ?? list[0]
+        setSymbol(hit.symbol)
+        setSd(hit.start)
+        setEd(hit.end)
+      }
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const hit = availableSymbols.find(x => x.symbol === symbol)
+    if (!hit) return
+    if (sd < hit.start) setSd(hit.start)
+    if (ed > hit.end) setEd(hit.end)
+  }, [symbol, availableSymbols])
 
   const totalDays   = Math.max(1, (new Date(ed).getTime() - new Date(sd).getTime()) / 86400000)
   const tradingDays = Math.round(totalDays * 5 / 7)
@@ -252,7 +275,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
     const { data, error: err } = await createClient().from('sessions').insert({
       user_id:       user!.id,
       name:          name.trim(),
-      symbol:        'XAUUSD',
+      symbol,
       start_date:    sd,
       end_date:      ed,
       start_capital: parseFloat(cap),
@@ -285,11 +308,22 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
         }}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>XAU/USD (Gold)</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Dukascopy M1 bid · 354,387 candles available</p>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>Market Pair</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Dukascopy H1 data saved locally from 2010-01-01 to present</p>
             </div>
-            <Badge variant="blue">XAUUSD</Badge>
+            <Badge variant="blue">{symbol}</Badge>
           </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>Pair</p>
+          <select value={symbol} onChange={e => setSymbol(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
+            {availableSymbols.length ? availableSymbols.map(item => (
+              <option key={item.symbol} value={item.symbol}>{item.symbol}</option>
+            )) : <option value="XAUUSD">XAUUSD</option>}
+          </select>
         </div>
 
         {/* Strategy picker */}
@@ -311,7 +345,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             label={t('startDate')}
             type="date"
             value={sd}
-            min="2025-01-01"
+            min={availableSymbols.find(x => x.symbol === symbol)?.start ?? "2010-01-01"}
             max={ed}
             onChange={e => { setSd(e.target.value); setError('') }}
           />
@@ -320,7 +354,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             type="date"
             value={ed}
             min={sd}
-            max="2025-12-31"
+            max={availableSymbols.find(x => x.symbol === symbol)?.end ?? new Date().toISOString().slice(0, 10)}
             onChange={e => { setEd(e.target.value); setError('') }}
           />
         </div>
