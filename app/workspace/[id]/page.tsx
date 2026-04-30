@@ -132,13 +132,8 @@ export default function WorkspacePage() {
         m1 = (body?.candles as Candle[]) ?? []
       }
     } catch {}
-
     if (!m1.length) {
-      const { data: cache } = await supabase.from('candle_cache').select('candles').eq('session_id', id).single()
-      m1 = (cache?.candles as Candle[]) ?? []
-    }
-    if (!m1.length) {
-      alert('Failed to load chart data.')
+      alert(`No local data found for ${s.symbol} in selected range. Please download data files first.`)
       router.push('/dashboard/sessions'); return
     }
 

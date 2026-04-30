@@ -226,6 +226,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
   const [saving,     setSaving]     = useState(false)
   const [strategies, setStrategies] = useState<Strategy[]>([])
   const [strategyId, setStrategyId] = useState<string>('')
+  const [availableSymbols, setAvailableSymbols] = useState<{symbol:string;start:string;end:string}[]>([])
 
   useEffect(() => {
     if (user) {
@@ -233,6 +234,27 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
         .then(({ data }) => setStrategies((data as Strategy[]) ?? []))
     }
   }, [user])
+
+
+  useEffect(() => {
+    fetch('/api/data/available').then(r => r.json()).then((body) => {
+      const list = (body?.symbols ?? []) as {symbol:string;start:string;end:string}[]
+      setAvailableSymbols(list)
+      if (list.length) {
+        const hit = list.find(x => x.symbol === symbol) ?? list[0]
+        setSymbol(hit.symbol)
+        setSd(hit.start)
+        setEd(hit.end)
+      }
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const hit = availableSymbols.find(x => x.symbol === symbol)
+    if (!hit) return
+    if (sd < hit.start) setSd(hit.start)
+    if (ed > hit.end) setEd(hit.end)
+  }, [symbol, availableSymbols])
 
   const totalDays   = Math.max(1, (new Date(ed).getTime() - new Date(sd).getTime()) / 86400000)
   const tradingDays = Math.round(totalDays * 5 / 7)
@@ -298,9 +320,9 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
           <select value={symbol} onChange={e => setSymbol(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm outline-none"
             style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
-            {['XAUUSD','EURUSD','GBPUSD','USDJPY','USDCHF','AUDUSD','USDCAD','NZDUSD','EURGBP','EURJPY','GBPJPY','EURAUD','EURCAD','GBPAUD','GBPCAD'].map(sym => (
-              <option key={sym} value={sym}>{sym}</option>
-            ))}
+            {availableSymbols.length ? availableSymbols.map(item => (
+              <option key={item.symbol} value={item.symbol}>{item.symbol}</option>
+            )) : <option value="XAUUSD">XAUUSD</option>}
           </select>
         </div>
 
@@ -323,7 +345,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             label={t('startDate')}
             type="date"
             value={sd}
-            min="2010-01-01"
+            min={availableSymbols.find(x => x.symbol === symbol)?.start ?? "2010-01-01"}
             max={ed}
             onChange={e => { setSd(e.target.value); setError('') }}
           />
@@ -332,7 +354,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             type="date"
             value={ed}
             min={sd}
-            max={new Date().toISOString().slice(0, 10)}
+            max={availableSymbols.find(x => x.symbol === symbol)?.end ?? new Date().toISOString().slice(0, 10)}
             onChange={e => { setEd(e.target.value); setError('') }}
           />
         </div>
