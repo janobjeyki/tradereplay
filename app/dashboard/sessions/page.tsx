@@ -259,7 +259,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
 
   const totalDays   = Math.max(1, (new Date(ed).getTime() - new Date(sd).getTime()) / 86400000)
   const tradingDays = Math.round(totalDays * 5 / 7)
-  const estCandles  = Math.round(tradingDays * 390)
+  const estCandles  = Math.round(tradingDays * 1380) // forex/gold ~23h/day = ~1380 M1 candles
 
   function createSessionError(message: string) {
     if (message.toLowerCase().includes('row-level security')) {

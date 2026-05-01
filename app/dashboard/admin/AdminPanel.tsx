@@ -183,7 +183,7 @@ export function AdminPanel() {
               <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
                 <h3 className="font-bold">Market Data Sync</h3>
                 <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Replace all Forex + Gold Dukascopy H1 data from 2010-01-01 up to the moment you click sync.
+                  Downloads raw M1 (1-minute) candles for all 15 Forex + Gold pairs from Dukascopy, 2010–today. The workspace aggregates to any timeframe on the fly. ⚠️ On Vercel Hobby, run `node scripts/download-market-data.mjs` locally instead.
                 </p>
                 <div className="mt-3">
                   <Button variant="primary" loading={syncingData} onClick={syncAllMarketData}>

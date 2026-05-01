@@ -1,3 +1,12 @@
+/**
+ * Standalone script to download M1 data for all Forex + Gold pairs from Dukascopy.
+ * Run this locally or on a server with no timeout constraints:
+ *   node scripts/download-market-data.mjs
+ *
+ * Output: public/data/{symbol}-m1-2010-now.json  (raw M1 candles, Unix seconds timestamps)
+ * The workspace reads these files directly and aggregates to any timeframe on the fly.
+ */
+
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -10,16 +19,14 @@ const MULTIPLIER = {
 }
 
 const SYMBOLS = Object.keys(MULTIPLIER)
-const START = '2010-01-01'
-const END = new Date().toISOString().slice(0, 10)
+const START   = '2010-01-01'
+const END     = new Date().toISOString().slice(0, 10)
 const OUT_DIR = path.resolve('public/data')
 
 function lz4BlockDecode(src) {
-  const dst = []
-  let sp = 0
+  const dst = []; let sp = 0
   while (sp < src.length) {
-    const token = src[sp++]
-    let litLen = token >>> 4
+    const token = src[sp++]; let litLen = token >>> 4
     if (litLen === 15) { let x; do { x = src[sp++]; litLen += x } while (x === 255) }
     for (let i = 0; i < litLen; i++) dst.push(src[sp++])
     if (sp >= src.length) break
@@ -35,8 +42,7 @@ function lz4BlockDecode(src) {
 function decodeLZ4Frame(buf) {
   let p = 4
   if (buf.readUInt32LE(0) !== 0x184D2204) throw new Error('Not LZ4 frame')
-  const flg = buf[p++]
-  p++
+  const flg = buf[p++]; p++
   if ((flg >> 3) & 1) p += 8
   p++
   const chunks = []
@@ -52,13 +58,13 @@ function decodeLZ4Frame(buf) {
   return Buffer.concat(chunks)
 }
 
-function parseRecords(buf, mult, dayMs) {
+function parseM1Records(buf, mult, dayMs) {
   const out = []
   for (let i = 0; i + 24 <= buf.length; i += 24) {
     const msOffset = buf.readUInt32BE(i)
-    const open = buf.readInt32BE(i + 4) / mult
-    const high = buf.readInt32BE(i + 8) / mult
-    const low = buf.readInt32BE(i + 12) / mult
+    const open  = buf.readInt32BE(i + 4)  / mult
+    const high  = buf.readInt32BE(i + 8)  / mult
+    const low   = buf.readInt32BE(i + 12) / mult
     const close = buf.readInt32BE(i + 16) / mult
     if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue
     out.push({ time: Math.floor((dayMs + msOffset) / 1000), open, high, low, close })
@@ -66,25 +72,10 @@ function parseRecords(buf, mult, dayMs) {
   return out
 }
 
-function toH1(mins) {
-  const map = new Map()
-  for (const c of mins) {
-    const hKey = Math.floor(c.time / 3600) * 3600
-    const h = map.get(hKey)
-    if (!h) map.set(hKey, { time: hKey, open: c.open, high: c.high, low: c.low, close: c.close })
-    else {
-      if (c.high > h.high) h.high = c.high
-      if (c.low < h.low) h.low = c.low
-      h.close = c.close
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => a.time - b.time)
-}
-
 function tradingDays(start, end) {
   const days = []
-  const cur = new Date(start + 'T00:00:00Z')
-  const last = new Date(end + 'T00:00:00Z')
+  const cur  = new Date(start + 'T00:00:00Z')
+  const last = new Date(end   + 'T00:00:00Z')
   while (cur <= last) {
     const dow = cur.getUTCDay()
     if (dow !== 0 && dow !== 6) days.push(new Date(cur))
@@ -94,7 +85,7 @@ function tradingDays(start, end) {
 }
 
 function dukaUrl(sym, d) {
-  return `https://datafeed.dukascopy.com/datafeed/${sym}/${d.getUTCFullYear()}/${String(d.getUTCMonth()).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}/BID_candles_min_1.bi5`
+  return `https://datafeed.dukascopy.com/datafeed/${sym}/${d.getUTCFullYear()}/${String(d.getUTCMonth()).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}/BID_candles_min_1.bi5`
 }
 
 async function fetchDay(sym, date, mult) {
@@ -103,7 +94,7 @@ async function fetchDay(sym, date, mult) {
     if (!res.ok) return []
     const ab = await res.arrayBuffer()
     if (!ab.byteLength) return []
-    return parseRecords(decodeLZ4Frame(Buffer.from(ab)), mult, date.getTime())
+    return parseM1Records(decodeLZ4Frame(Buffer.from(ab)), mult, date.getTime())
   } catch {
     return []
   }
@@ -112,17 +103,17 @@ async function fetchDay(sym, date, mult) {
 async function downloadSymbol(sym) {
   const mult = MULTIPLIER[sym]
   const days = tradingDays(START, END)
-  const all = []
+  const all  = []
   for (let i = 0; i < days.length; i += 20) {
-    const chunk = days.slice(i, i + 20)
+    const chunk   = days.slice(i, i + 20)
     const results = await Promise.all(chunk.map((d) => fetchDay(sym, d, mult)))
     for (const r of results) all.push(...r)
     if ((i / 20) % 10 === 0) console.log(`${sym}: ${Math.min(i + 20, days.length)}/${days.length} days`)
   }
-  const h1 = toH1(all)
-  const outPath = path.join(OUT_DIR, `${sym.toLowerCase()}-h1-2010-now.json`)
-  await fs.writeFile(outPath, JSON.stringify(h1))
-  console.log(`${sym}: wrote ${h1.length} H1 candles -> ${outPath}`)
+  all.sort((a, b) => a.time - b.time)
+  const outPath = path.join(OUT_DIR, `${sym.toLowerCase()}-m1-2010-now.json`)
+  await fs.writeFile(outPath, JSON.stringify(all))
+  console.log(`${sym}: wrote ${all.length} M1 candles -> ${outPath}`)
 }
 
 await fs.mkdir(OUT_DIR, { recursive: true })

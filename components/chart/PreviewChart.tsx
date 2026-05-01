@@ -46,46 +46,23 @@ export function PreviewChart() {
 
       chartRef.current = chart
 
-      // Load real CSV — show 500 active candles from day 1
-      fetch('/xauusd-m1-2025.csv')
-        .then(r => r.text())
-        .then(text => {
-          const lines = text.trim().split('\n').slice(1)
-          const data: any[] = []
-          for (const line of lines) {
-            const p = line.split(',')
-            if (p.length < 5) continue
-            const h = parseFloat(p[2]), l = parseFloat(p[3])
-            if (h === l) continue   // skip flat rows
-            data.push({
-              time:  Math.floor(parseInt(p[0], 10) / 1000),
-              open:  parseFloat(p[1]),
-              high:  h,
-              low:   l,
-              close: parseFloat(p[4]),
-            })
-            if (data.length >= 500) break
-          }
-          series.setData(data)
-          chart.timeScale().fitContent()
-        })
-        .catch(() => {
-          // Fallback: synthetic XAUUSD-looking data
-          const d: any[] = []
-          let p = 2624.25
-          const base = 1735772400 // Jan 2 2025 00:00 UTC
-          for (let i = 0; i < 400; i++) {
-            const o = p
-            const mv = (Math.random() - 0.494) * 2.2
-            const cl = +(o + mv).toFixed(2)
-            const h  = +(Math.max(o, cl) + Math.random() * 1.1).toFixed(2)
-            const l  = +(Math.min(o, cl) - Math.random() * 1.1).toFixed(2)
-            d.push({ time: base + i * 60, open: o, high: h, low: l, close: cl })
-            p = cl
-          }
-          series.setData(d)
-          chart.timeScale().fitContent()
-        })
+      // Synthetic XAUUSD-looking preview data
+      {
+        const d: any[] = []
+        let p = 2624.25
+        const base = 1735772400 // Jan 2 2025 00:00 UTC
+        for (let i = 0; i < 400; i++) {
+          const o  = p
+          const mv = (Math.random() - 0.494) * 2.2
+          const cl = +(o + mv).toFixed(2)
+          const h  = +(Math.max(o, cl) + Math.random() * 1.1).toFixed(2)
+          const l  = +(Math.min(o, cl) - Math.random() * 1.1).toFixed(2)
+          d.push({ time: base + i * 60, open: o, high: h, low: l, close: cl })
+          p = cl
+        }
+        series.setData(d)
+        chart.timeScale().fitContent()
+      }
 
       const ro = new ResizeObserver(entries => {
         for (const e of entries) chart.resize(e.contentRect.width, 200)
