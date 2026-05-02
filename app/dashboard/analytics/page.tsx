@@ -120,7 +120,7 @@ export default function AnalyticsPage() {
           <div className="flex flex-col gap-4 animate-fade-in">
 
             {/* ── Top row: session info + description ── */}
-            <div className="grid grid-cols-1 gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
               {/* Session card */}
               <div className="rounded-2xl p-6" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
@@ -245,7 +245,8 @@ export default function AnalyticsPage() {
                 </div>
               ) : (
                 <>
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px]">
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                         {['Name', 'Side', 'Date', 'Symbol', 'Entry', 'Exit', 'ROI'].map(h => (
@@ -278,6 +279,7 @@ export default function AnalyticsPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
 
                   {/* Pagination */}
                   <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: '1px solid var(--border-subtle)' }}>

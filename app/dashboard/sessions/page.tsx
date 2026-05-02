@@ -103,7 +103,7 @@ export default function SessionsPage() {
         ) : (
           <div className="flex flex-col gap-3 animate-fade-in">
             {/* Desktop column headers — hidden on mobile */}
-            <div className="hidden md:grid px-4 pb-1 gap-2"
+            <div className="hidden xl:grid px-4 pb-1 gap-2"
               style={{ gridTemplateColumns: '2fr 100px 160px 90px 110px 64px 96px 80px' }}>
               {['Session', t('symbol'), t('period'), t('startCap'), t('endCap'), t('winRate'), '', ''].map((h, i) => (
                 <span key={i} className="text-[10px] uppercase tracking-widest"
@@ -132,7 +132,7 @@ export default function SessionsPage() {
                   }}
                 >
                   {/* Desktop row */}
-                  <div className="hidden md:grid gap-2 items-center"
+                  <div className="hidden xl:grid gap-2 items-center"
                     style={{ gridTemplateColumns: '2fr 100px 160px 90px 110px 64px 96px 80px' }}>
                     <div>
                       <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{s.name}</p>
@@ -164,8 +164,8 @@ export default function SessionsPage() {
                     </Button>
                   </div>
 
-                  {/* Mobile card layout */}
-                  <div className="flex md:hidden flex-col gap-2">
+                  {/* Mobile / tablet card layout */}
+                  <div className="flex xl:hidden flex-col gap-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{s.name}</p>

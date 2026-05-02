@@ -282,3 +282,41 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.55); curs
   .hidden-mobile-logo { display: none; }
   .mobile-only-logo   { display: block; }
 }
+
+/* ── Workspace responsive layout ──────────────────────────────── */
+/* Desktop: chart on left, trade form on right (default styles in JSX) */
+
+/* iPad / tablet portrait: narrower trade panel so chart has room */
+@media (max-width: 1024px) and (min-width: 901px) {
+  .workspace-trade-panel {
+    width: 240px !important;
+  }
+}
+
+/* iPad portrait & smaller: stack trade form below chart */
+@media (max-width: 900px) {
+  .workspace-main {
+    flex-direction: column !important;
+  }
+  .workspace-trade-panel {
+    width: 100% !important;
+    max-height: 46vh;
+    border-left: none !important;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .workspace-top-bar {
+    row-gap: 6px;
+  }
+  .workspace-top-bar .workspace-top-stats {
+    margin-left: 0 !important;
+    width: 100%;
+    justify-content: flex-end;
+    gap: 14px !important;
+  }
+  .workspace-controls {
+    row-gap: 6px;
+  }
+  .workspace-controls .workspace-controls-right {
+    margin-left: 0 !important;
+  }
+}

@@ -526,7 +526,7 @@ export default function WorkspacePage() {
       )}
 
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 shrink-0 flex-wrap min-h-[44px]"
+      <div className="workspace-top-bar flex items-center gap-3 px-4 py-2 shrink-0 flex-wrap min-h-[44px]"
         style={{borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
         <button onClick={() => router.push('/dashboard/sessions')}
           className="text-sm rounded-lg px-3 py-1.5 transition-all shrink-0"
@@ -616,7 +616,7 @@ export default function WorkspacePage() {
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-4 shrink-0">
+        <div className="workspace-top-stats ml-auto flex items-center gap-4 shrink-0">
           <div className="text-right">
             <p className="text-[9px] uppercase tracking-wide" style={{color:'var(--text-muted)'}}>Equity</p>
             <p className="font-mono font-bold text-base" style={{color: equityColor}}>
@@ -643,7 +643,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* Main */}
-      <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
+      <div className="workspace-main" style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, minHeight:0 }}>
 
           <div style={{ flex:1, minHeight:0, overflow:'hidden', position:'relative' }}>
@@ -799,7 +799,7 @@ export default function WorkspacePage() {
           </div>
 
           {/* Controls */}
-          <div className="flex items-center gap-3 px-4 py-2.5 shrink-0 flex-wrap"
+          <div className="workspace-controls flex items-center gap-3 px-4 py-2.5 shrink-0 flex-wrap"
             style={{borderTop:'1px solid var(--border-subtle)', background:'var(--bg-secondary)'}}>
             <button onClick={() => advance(1)} disabled={done || accountBreached}
               className="px-4 py-2 font-bold text-sm rounded-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -825,7 +825,7 @@ export default function WorkspacePage() {
                 {t('allCandlesRevealed')}
               </span>
             )}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="workspace-controls-right ml-auto flex items-center gap-2">
               <span className="font-mono text-[10px] whitespace-nowrap" style={{color:'var(--text-muted)'}}>
                 {formatTime(m1Time, timezone)}
               </span>
@@ -944,7 +944,7 @@ export default function WorkspacePage() {
         </div>
 
         {/* Right panel — Exness-style trading form */}
-        <div style={{
+        <div className="workspace-trade-panel" style={{
           width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column',
           borderLeft: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)',
           overflow: 'auto',
