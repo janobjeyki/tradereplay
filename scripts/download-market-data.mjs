@@ -121,3 +121,42 @@ for (const sym of SYMBOLS) {
   await downloadSymbol(sym)
 }
 console.log('Done')
+
+// ── Optional: upload to Supabase Storage ─────────────────────────────────────
+// Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your env
+// then run:  node scripts/download-market-data.mjs --upload
+//
+// This lets you seed Supabase Storage from your local machine without
+// running the sync via the admin panel.
+
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+async function uploadToSupabase(symbol, candles) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) { console.log('Skipping upload — set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'); return }
+
+  const supabase = createSupabaseClient(url, key, { auth: { persistSession: false } })
+  const filename = `${symbol.toLowerCase()}-m1-2010-now.json`
+  const body = Buffer.from(JSON.stringify(candles))
+
+  const { error } = await supabase.storage
+    .from('market-data')
+    .upload(filename, body, { contentType: 'application/json', upsert: true })
+
+  if (error) console.error(`Upload failed for ${symbol}:`, error.message)
+  else console.log(`Uploaded ${symbol} to Supabase Storage`)
+}
+
+if (process.argv.includes('--upload')) {
+  // Re-upload all already-downloaded files
+  for (const sym of SYMBOLS) {
+    const filePath = path.join(OUT_DIR, `${sym.toLowerCase()}-m1-2010-now.json`)
+    try {
+      const raw = await fs.readFile(filePath, 'utf8')
+      await uploadToSupabase(sym, JSON.parse(raw))
+    } catch {
+      console.error(`No local file for ${sym} — run without --upload first`)
+    }
+  }
+}
