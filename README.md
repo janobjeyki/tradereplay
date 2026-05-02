@@ -1,4 +1,4 @@
-# BackTest App
+# TradeLab
 
 Candle-by-candle trading simulator — **Next.js 14** (App Router) + **Supabase** + **TypeScript** + **Tailwind CSS** + **TradingView lightweight-charts**.
 
@@ -37,7 +37,7 @@ Candle-by-candle trading simulator — **Next.js 14** (App Router) + **Supabase*
 ## Project Structure
 
 ```
-backtest-app/
+tradelab/
 ├── app/
 │   ├── layout.tsx                    # Root layout (ThemeProvider → AuthProvider → LangProvider)
 │   ├── globals.css                   # CSS variables: dark + light theme, blue accent

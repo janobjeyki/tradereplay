@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const meta = PAGE_META[pathname] ?? {
-    title: 'BackTest Dashboard',
+    title: 'TradeLab Dashboard',
     subtitle: 'A focused control room for replay, analytics, and account access.',
   }
   const isAdmin = isAdminEmail(user?.email)
