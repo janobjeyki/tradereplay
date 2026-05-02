@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdminUser } from '@/lib/admin/auth'
+import { requireAdminUser } from '@/lib/admin/requireAdmin'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 type AdminAction = 'gift' | 'extend' | 'cancel'

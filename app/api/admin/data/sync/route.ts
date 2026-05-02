@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { requireAdminUser } from '@/lib/admin/auth'
+import { requireAdminUser } from '@/lib/admin/requireAdmin'
 import {
   DEFAULT_MARKET_DATA_START,
   DUKASCOPY_FOREX_AND_GOLD_SYMBOLS,

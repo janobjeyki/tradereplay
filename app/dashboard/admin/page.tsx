@@ -1,5 +1,5 @@
 import { Alert } from '@/components/ui'
-import { requireAdminUser } from '@/lib/admin/auth'
+import { requireAdminUser } from '@/lib/admin/requireAdmin'
 import { AdminPanel } from './AdminPanel'
 
 export default async function AdminPage() {
