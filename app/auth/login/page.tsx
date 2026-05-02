@@ -40,9 +40,9 @@ export default function LoginPage() {
     <div className="flex flex-col gap-6">
       <TradeLabLogo className="w-[130px] mx-auto" />
       <div className="text-center">
-        <h1 className="font-black text-2xl">{resetMode ? 'Reset Password' : t('welcomeBack')}</h1>
+        <h1 className="font-black text-2xl">{resetMode ? 'Reset Password' : t('login')}</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-          {resetMode ? 'Enter your email and we\'ll send a reset link' : t('signInContinue')}
+          {resetMode ? 'Enter your email and we\'ll send a reset link' : 'Sign in to your account'}
         </p>
       </div>
 
@@ -100,7 +100,7 @@ export default function LoginPage() {
 
       <p className="text-center text-sm" style={{ color: 'var(--text-muted)' }}>
         {t('noAccount')}{' '}
-        <Link href="/auth/register" style={{ color: 'var(--accent)' }}>{t('signUpLink')}</Link>
+        <Link href="/auth/register" style={{ color: 'var(--accent)' }}>{t('register')}</Link>
       </p>
     </div>
   )
