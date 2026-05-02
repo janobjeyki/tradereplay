@@ -1,3 +1,4 @@
+import { DATA_DIR } from '@/app/api/admin/data/sync/route'
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'node:fs/promises'
 import path from 'node:path'

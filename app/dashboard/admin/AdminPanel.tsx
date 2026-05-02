@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Input, Spinner } from '@/components/ui'
 import type { Profile, SubscriptionTransaction } from '@/types'
 
+const SYNC_SYMBOLS = [
+  'AUDUSD','EURAUD','EURCAD','EURGBP','EURJPY','EURUSD',
+  'GBPAUD','GBPCAD','GBPJPY','GBPUSD','NZDUSD','USDCAD',
+  'USDCHF','USDJPY','XAUUSD',
+]
+
 interface AdminUser {
   id: string
   email: string | null
@@ -12,6 +18,13 @@ interface AdminUser {
   profile: Profile | null
   sessions_count: number
   transactions: SubscriptionTransaction[]
+}
+
+interface SymbolProgress {
+  symbol: string
+  status: 'pending' | 'syncing' | 'done' | 'error'
+  candles?: number
+  error?: string
 }
 
 function formatDate(value?: string | null) {
@@ -27,6 +40,7 @@ export function AdminPanel() {
   const [saving, setSaving] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [syncProgress, setSyncProgress] = useState<SymbolProgress[]>([])
   const [syncingData, setSyncingData] = useState(false)
 
   const selected = useMemo(
@@ -37,9 +51,7 @@ export function AdminPanel() {
   const fetchUsers = useCallback(async (search: string) => {
     setLoading(true)
     setError('')
-    const response = await fetch(`/api/admin/users?query=${encodeURIComponent(search)}`, {
-      cache: 'no-store',
-    })
+    const response = await fetch(`/api/admin/users?query=${encodeURIComponent(search)}`, { cache: 'no-store' })
     const payload = await response.json()
     if (!response.ok) {
       setError(payload.error || 'Failed to load users')
@@ -52,30 +64,50 @@ export function AdminPanel() {
     setLoading(false)
   }, [])
 
-  useEffect(() => {
-    void fetchUsers('')
-  }, [fetchUsers])
+  useEffect(() => { void fetchUsers('') }, [fetchUsers])
 
   function savingKey(action: 'gift' | 'extend' | 'cancel', months?: number, lifetime = false) {
     return `${action}-${months ?? (lifetime ? 'lifetime' : 'default')}`
   }
 
-
-
   async function syncAllMarketData() {
     setSyncingData(true)
     setError('')
     setMessage('')
-    const response = await fetch('/api/admin/data/sync', { method: 'POST' })
-    const payload = await response.json().catch(() => ({} as any))
-    if (!response.ok) {
-      setError(payload.error || 'Failed to sync market data')
-      setSyncingData(false)
-      return
+
+    // Initialise all symbols as pending
+    setSyncProgress(SYNC_SYMBOLS.map(s => ({ symbol: s, status: 'pending' })))
+
+    for (const symbol of SYNC_SYMBOLS) {
+      // Mark as syncing
+      setSyncProgress(prev => prev.map(p => p.symbol === symbol ? { ...p, status: 'syncing' } : p))
+
+      try {
+        const res = await fetch(`/api/admin/data/sync?symbol=${symbol}`, { method: 'POST' })
+        const data = await res.json().catch(() => ({} as any))
+        if (!res.ok) {
+          setSyncProgress(prev => prev.map(p =>
+            p.symbol === symbol ? { ...p, status: 'error', error: data.error || `HTTP ${res.status}` } : p
+          ))
+        } else {
+          const symbolResult = data.result?.[0]
+          setSyncProgress(prev => prev.map(p =>
+            p.symbol === symbol
+              ? { ...p, status: symbolResult?.error ? 'error' : 'done', candles: symbolResult?.candles, error: symbolResult?.error }
+              : p
+          ))
+        }
+      } catch (err) {
+        setSyncProgress(prev => prev.map(p =>
+          p.symbol === symbol ? { ...p, status: 'error', error: String(err) } : p
+        ))
+      }
     }
-    setMessage(`Market data synced from ${payload.start} to ${payload.end} for ${payload.symbols?.length || 0} symbols.`)
+
+    setMessage('Sync complete.')
     setSyncingData(false)
   }
+
   async function updateSubscription(action: 'gift' | 'extend' | 'cancel', months?: number, lifetime = false) {
     if (!selected) return
     setSaving(savingKey(action, months, lifetime))
@@ -108,13 +140,9 @@ export function AdminPanel() {
               placeholder="Search email or user id"
               value={query}
               onChange={event => setQuery(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') void fetchUsers(query)
-              }}
+              onKeyDown={event => { if (event.key === 'Enter') void fetchUsers(query) }}
             />
-            <Button variant="primary" loading={loading} onClick={() => fetchUsers(query)}>
-              Search
-            </Button>
+            <Button variant="primary" loading={loading} onClick={() => fetchUsers(query)}>Search</Button>
           </div>
 
           <div className="mt-4 max-h-[62vh] overflow-y-auto pr-1">
@@ -127,16 +155,12 @@ export function AdminPanel() {
                 {users.map(item => {
                   const active = item.id === selected?.id
                   return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelectedId(item.id)}
+                    <button key={item.id} type="button" onClick={() => setSelectedId(item.id)}
                       className="rounded-xl px-3 py-3 text-left transition-all"
                       style={{
                         background: active ? 'var(--bg-elevated)' : 'var(--bg-tertiary)',
                         border: active ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                      }}
-                    >
+                      }}>
                       <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{item.email || 'No email'}</p>
                       <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{item.id}</p>
                       <div className="mt-2 flex items-center gap-2">
@@ -172,46 +196,65 @@ export function AdminPanel() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <Info label="Plan" value={selected.profile?.subscription_plan || 'none'} />
-                <Info label="Price" value={`${Number(selected.profile?.subscription_price || 0).toLocaleString()} UZS`} />
+                <Info label="Plan"    value={selected.profile?.subscription_plan || 'none'} />
+                <Info label="Price"   value={`${Number(selected.profile?.subscription_price || 0).toLocaleString()} UZS`} />
                 <Info label="Expires" value={formatDate(selected.profile?.subscription_expires_at)} />
                 <Info label="Payment" value={selected.profile?.payment_method ? selected.profile.payment_method.toUpperCase() : 'none'} />
-                <Info label="Card" value={selected.profile?.card_last4 ? `•••• ${selected.profile.card_last4}` : 'none'} />
+                <Info label="Card"    value={selected.profile?.card_last4 ? `•••• ${selected.profile.card_last4}` : 'none'} />
                 <Info label="Sessions" value={String(selected.sessions_count)} />
               </div>
 
+              {/* Market Data Sync */}
               <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
                 <h3 className="font-bold">Market Data Sync</h3>
                 <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Downloads raw M1 (1-minute) candles for all 15 Forex + Gold pairs from Dukascopy, 2010–today. The workspace aggregates to any timeframe on the fly. ⚠️ On Vercel Hobby, run `node scripts/download-market-data.mjs` locally instead.
+                  Downloads raw M1 candles for all 15 pairs from Dukascopy (2010–today), one symbol at a time.
+                  Data is stored in <code>/tmp</code> on the server. Each symbol takes ~1–3 minutes.
                 </p>
                 <div className="mt-3">
                   <Button variant="primary" loading={syncingData} onClick={syncAllMarketData}>
-                    Sync All Market Data
+                    {syncingData ? 'Syncing…' : 'Sync All Market Data'}
                   </Button>
                 </div>
+
+                {syncProgress.length > 0 && (
+                  <div className="mt-4 flex flex-col gap-1">
+                    {syncProgress.map(p => (
+                      <div key={p.symbol} className="flex items-center gap-3 text-sm">
+                        <span className="font-mono w-16" style={{ color: 'var(--text-primary)' }}>{p.symbol}</span>
+                        {p.status === 'pending'  && <span style={{ color: 'var(--text-muted)' }}>waiting…</span>}
+                        {p.status === 'syncing'  && <span style={{ color: 'var(--accent)' }}>⟳ syncing…</span>}
+                        {p.status === 'done'     && <span style={{ color: 'var(--green)' }}>✓ {p.candles?.toLocaleString()} candles</span>}
+                        {p.status === 'error'    && <span style={{ color: 'var(--red)' }}>✗ {p.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
+              {/* Gift Subscription */}
               <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
                 <h3 className="font-bold">Gift Subscription</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button loading={saving === 'gift-1'} onClick={() => updateSubscription('gift', 1)}>Gift 1 Month</Button>
-                  <Button loading={saving === 'gift-3'} onClick={() => updateSubscription('gift', 3)}>Gift 3 Months</Button>
-                  <Button loading={saving === 'gift-6'} onClick={() => updateSubscription('gift', 6)}>Gift 6 Months</Button>
+                  <Button loading={saving === 'gift-1'}        onClick={() => updateSubscription('gift', 1)}>Gift 1 Month</Button>
+                  <Button loading={saving === 'gift-3'}        onClick={() => updateSubscription('gift', 3)}>Gift 3 Months</Button>
+                  <Button loading={saving === 'gift-6'}        onClick={() => updateSubscription('gift', 6)}>Gift 6 Months</Button>
                   <Button loading={saving === 'gift-lifetime'} onClick={() => updateSubscription('gift', undefined, true)}>Gift Lifetime</Button>
                 </div>
               </div>
 
+              {/* Manage Access */}
               <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
                 <h3 className="font-bold">Manage Access</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button loading={saving === 'extend-1'} onClick={() => updateSubscription('extend', 1)}>Extend 1 Month</Button>
-                  <Button loading={saving === 'extend-3'} onClick={() => updateSubscription('extend', 3)}>Extend 3 Months</Button>
-                  <Button loading={saving === 'extend-12'} onClick={() => updateSubscription('extend', 12)}>Extend 1 Year</Button>
+                  <Button loading={saving === 'extend-1'}       onClick={() => updateSubscription('extend', 1)}>Extend 1 Month</Button>
+                  <Button loading={saving === 'extend-3'}       onClick={() => updateSubscription('extend', 3)}>Extend 3 Months</Button>
+                  <Button loading={saving === 'extend-12'}      onClick={() => updateSubscription('extend', 12)}>Extend 1 Year</Button>
                   <Button variant="danger" loading={saving === 'cancel-default'} onClick={() => updateSubscription('cancel')}>Cancel Access</Button>
                 </div>
               </div>
 
+              {/* Payments */}
               <div className="rounded-xl p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
                 <h3 className="font-bold">Payments</h3>
                 {selected.transactions.length === 0 ? (
@@ -222,7 +265,9 @@ export function AdminPanel() {
                       <div key={tx.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--bg-secondary)' }}>
                         <div>
                           <p className="text-sm font-semibold">{Number(tx.amount || 0).toLocaleString()} {tx.currency}</p>
-                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{new Date(tx.created_at).toLocaleString()} · {tx.payment_method?.toUpperCase()} {tx.card_last4}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {new Date(tx.created_at).toLocaleString()} · {tx.payment_method?.toUpperCase()} {tx.card_last4}
+                          </p>
                         </div>
                         <Badge variant={tx.status === 'authorized' ? 'green' : tx.status === 'pending' ? 'blue' : 'red'}>{tx.status}</Badge>
                       </div>

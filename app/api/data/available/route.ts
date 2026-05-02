@@ -1,3 +1,4 @@
+import { DATA_DIR } from '@/app/api/admin/data/sync/route'
 import { NextResponse } from 'next/server'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -11,7 +12,7 @@ import {
 interface Candle { time: number }
 
 export async function GET() {
-  const dir = path.join(process.cwd(), 'public', 'data')
+  const dir = DATA_DIR
 
   const symbols: { symbol: string; start: string; end: string; downloaded: boolean; candleCount: number }[] = []
 

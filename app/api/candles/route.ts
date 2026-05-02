@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { m1Filename, DUKASCOPY_MULTIPLIER } from '@/lib/marketData'
+import { DATA_DIR } from '@/app/api/admin/data/sync/route'
 
 interface Candle {
   time: number
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Unsupported symbol: ${symbol}` }, { status: 400 })
   }
 
-  const filePath = path.join(process.cwd(), 'public', 'data', m1Filename(symbol))
+  const filePath = path.join(DATA_DIR, m1Filename(symbol))
 
   let all: Candle[]
   try {
@@ -38,14 +39,13 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  // Include 3 months of context before startDate so indicators (EMA, etc.) can warm up
+  // Include 3 months of context before startDate so indicators can warm up
   const contextStart = new Date(`${startDate}T00:00:00Z`)
   contextStart.setUTCMonth(contextStart.getUTCMonth() - 3)
   const contextStartTs = Math.floor(contextStart.getTime() / 1000)
-
   const endTs = Math.floor(new Date(`${endDate}T00:00:00Z`).getTime() / 1000) + 86400
 
-  // Binary-search for the start of the window to avoid scanning millions of M1 candles
+  // Binary search for start of window
   let lo = 0, hi = all.length
   while (lo < hi) {
     const mid = (lo + hi) >>> 1
