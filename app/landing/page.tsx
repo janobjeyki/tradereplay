@@ -16,23 +16,23 @@ export default function LandingPage() {
     <div className="min-h-screen flex flex-col" style={{color:'var(--text-primary)'}}>
 
       {/* Nav */}
-      <nav className="sticky top-0 z-50 px-6 md:px-10 pt-6">
-        <div className="glass-card rounded-[24px] flex items-center justify-between px-5 py-3.5 gap-4">
+      <nav className="sticky top-0 z-50 px-4 sm:px-6 md:px-10 pt-4 sm:pt-6">
+        <div className="glass-card rounded-[24px] flex items-center justify-between px-3 sm:px-5 py-3 sm:py-3.5 gap-2 sm:gap-4">
           <div className="flex items-center gap-2.5 shrink-0">
-            <TradeLabLogo className="w-[150px]" />
+            <TradeLabLogo className="w-[120px] sm:w-[150px]" />
           </div>
 
-          <div className="hidden md:flex items-center gap-7 text-sm font-medium" style={{color:'var(--text-secondary)'}}>
+          <div className="hidden lg:flex items-center gap-7 text-sm font-medium" style={{color:'var(--text-secondary)'}}>
             <a href="#about" className="transition-colors hover:text-[var(--text-primary)]">{t('about')}</a>
             <a href="#pricing" className="transition-colors hover:text-[var(--text-primary)]">{t('pricing')}</a>
             <Link href="/support" className="transition-colors hover:text-[var(--text-primary)]">{t('contact')}</Link>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <select
               value={lang}
               onChange={e=>setLang(e.target.value as Language)}
-              className="h-11 min-w-[76px] rounded-xl px-3.5 text-sm font-semibold outline-none cursor-pointer appearance-none pr-8 transition-colors"
+              className="hidden sm:block h-11 min-w-[76px] rounded-xl px-3.5 text-sm font-semibold outline-none cursor-pointer appearance-none pr-8 transition-colors"
               style={{
                 background:'var(--bg-tertiary)',
                 border:'1px solid var(--border-default)',
@@ -48,17 +48,17 @@ export default function LandingPage() {
             <ThemeToggle
               theme={theme}
               onToggle={toggleTheme}
-              className="h-11 w-11 rounded-xl hover:-translate-y-0.5"
+              className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl hover:-translate-y-0.5"
             />
             <Link
               href="/auth/login"
-              className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold transition-all hover:-translate-y-0.5"
+              className="hidden sm:inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold transition-all hover:-translate-y-0.5"
               style={{color:'var(--text-secondary)', border:'1px solid var(--border-default)', background:'var(--bg-tertiary)'}}>
               {t('signIn')}
             </Link>
             <Link
               href="/auth/register"
-              className="inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-bold transition-all hover:-translate-y-0.5 text-white"
+              className="inline-flex h-10 sm:h-11 items-center justify-center rounded-xl px-3 sm:px-5 text-xs sm:text-sm font-bold transition-all hover:-translate-y-0.5 text-white whitespace-nowrap"
               style={{background:'var(--accent)', boxShadow:'0 14px 30px rgba(244, 87, 131, 0.24)'}}>
               {t('getStarted')}
             </Link>

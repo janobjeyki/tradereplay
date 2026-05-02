@@ -167,7 +167,8 @@ export default function StrategyPage() {
                       <span style={{ color: 'var(--accent)', marginLeft: 4 }}>Create a session and select this strategy.</span>
                     </div>
                   ) : (
-                    <table className="w-full">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px]">
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                           {['Name', 'Period', 'Start $', 'End $', 'Trades', 'PnL'].map(h => (
@@ -196,6 +197,7 @@ export default function StrategyPage() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               </>
