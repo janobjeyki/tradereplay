@@ -9,7 +9,7 @@ const TOUR_STEPS = [
   {
     type: 'center' as const,
     icon: '🚀',
-    title: 'Welcome to BackTest',
+    title: 'Welcome to TradeLab',
     body: 'Practice trading with real historical market data — candle by candle. Build genuine trading intuition without risking a cent.',
     cta: 'Show me around',
   },

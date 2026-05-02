@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
---  BackTest App — Supabase Migration 001
+--  TradeLab — Supabase Migration 001
 --  Run this in: Supabase Dashboard → SQL Editor
 -- ═══════════════════════════════════════════════════════════════
 
