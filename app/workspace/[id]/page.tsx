@@ -126,14 +126,20 @@ export default function WorkspacePage() {
     let m1: Candle[] = []
     try {
       const params = new URLSearchParams({ symbol: s.symbol, start: s.start_date, end: s.end_date })
-      const res = await fetch(`/api/candles?${params.toString()}`)
-      if (res.ok) {
-        const body = await res.json()
-        m1 = (body?.candles as Candle[]) ?? []
+      const res  = await fetch(`/api/candles?${params.toString()}`)
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = body?.error ?? `Failed to load market data (HTTP ${res.status})`
+        alert(msg)
+        router.push('/dashboard/sessions'); return
       }
-    } catch {}
+      m1 = (body?.candles as Candle[]) ?? []
+    } catch (err) {
+      alert(`Failed to load market data: ${String(err)}`)
+      router.push('/dashboard/sessions'); return
+    }
     if (!m1.length) {
-      alert(`No local data found for ${s.symbol} in selected range. Please download data files first.`)
+      alert(`No candles returned for ${s.symbol} — try a different date range or re-sync market data.`)
       router.push('/dashboard/sessions'); return
     }
 
