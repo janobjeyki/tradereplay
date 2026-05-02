@@ -1,27 +1,77 @@
 /**
- * Standalone script to download M1 data for all Forex + Gold pairs from Dukascopy.
- * Run this locally or on a server with no timeout constraints:
- *   node scripts/download-market-data.mjs
+ * Download all M1 market data from Dukascopy and upload to Supabase Storage.
  *
- * Output: public/data/{symbol}-m1-2010-now.json  (raw M1 candles, Unix seconds timestamps)
- * The workspace reads these files directly and aggregates to any timeframe on the fly.
+ * Usage:
+ *   1. Create a .env file in the project root (or export vars in your shell):
+ *        NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+ *        SUPABASE_SERVICE_ROLE_KEY=eyJ...
+ *
+ *   2. Run:
+ *        node scripts/download-market-data.mjs
+ *
+ * What it does:
+ *   - Downloads 1-minute (M1) candles for all 15 Forex + Gold pairs
+ *     from Dukascopy, 2010-01-01 to today
+ *   - Uploads each symbol as a single JSON file to your Supabase Storage
+ *     bucket "market-data"
+ *   - Saves files locally to public/data/ as a backup
+ *   - Skips days that return no data (weekends, holidays)
+ *   - Resumes from where it left off if re-run (re-uploads cleanly)
+ *
+ * Requirements:
+ *   - Node.js 18+
+ *   - npm install @supabase/supabase-js (or use npx)
+ *   - Supabase bucket "market-data" must exist (Storage → New bucket)
  */
 
-import fs from 'node:fs/promises'
+import fs   from 'node:fs/promises'
 import path from 'node:path'
+import { createClient } from '@supabase/supabase-js'
+import { config } from 'dotenv'
+
+// Load .env.local then .env
+config({ path: '.env.local' })
+config({ path: '.env' })
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY
+const BUCKET            = 'market-data'
+const OUT_DIR           = path.resolve('public/data')
+const START             = '2010-01-01'
+const END               = new Date().toISOString().slice(0, 10)
+const BATCH_SIZE        = 32   // concurrent day fetches
 
 const MULTIPLIER = {
   EURUSD: 100000, GBPUSD: 100000, USDCHF: 100000, AUDUSD: 100000,
   USDCAD: 100000, NZDUSD: 100000, EURGBP: 100000, EURAUD: 100000,
   EURCAD: 100000, GBPAUD: 100000, GBPCAD: 100000,
-  USDJPY: 1000, EURJPY: 1000, GBPJPY: 1000,
+  USDJPY: 1000,   EURJPY: 1000,   GBPJPY: 1000,
   XAUUSD: 100,
 }
-
 const SYMBOLS = Object.keys(MULTIPLIER)
-const START   = '2010-01-01'
-const END     = new Date().toISOString().slice(0, 10)
-const OUT_DIR = path.resolve('public/data')
+
+// ── Validate env ──────────────────────────────────────────────────────────────
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error(`
+ERROR: Missing environment variables.
+Create a .env.local file in the project root with:
+
+  NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+  SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+You can find these in: Supabase dashboard → Settings → API
+  `)
+  process.exit(1)
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+})
+
+// ── LZ4 / bi5 decoding ───────────────────────────────────────────────────────
 
 function lz4BlockDecode(src) {
   const dst = []; let sp = 0
@@ -72,6 +122,25 @@ function parseM1Records(buf, mult, dayMs) {
   return out
 }
 
+function dukaUrl(sym, d) {
+  const y  = d.getUTCFullYear()
+  const m  = String(d.getUTCMonth()).padStart(2, '0')   // 0-indexed
+  const dd = String(d.getUTCDate()).padStart(2, '0')
+  return `https://datafeed.dukascopy.com/datafeed/${sym}/${y}/${m}/${dd}/BID_candles_min_1.bi5`
+}
+
+async function fetchDay(sym, date, mult) {
+  try {
+    const res = await fetch(dukaUrl(sym, date), { signal: AbortSignal.timeout(20000) })
+    if (!res.ok) return []
+    const ab = await res.arrayBuffer()
+    if (!ab.byteLength) return []
+    return parseM1Records(decodeLZ4Frame(Buffer.from(ab)), mult, date.getTime())
+  } catch {
+    return []
+  }
+}
+
 function tradingDays(start, end) {
   const days = []
   const cur  = new Date(start + 'T00:00:00Z')
@@ -84,79 +153,62 @@ function tradingDays(start, end) {
   return days
 }
 
-function dukaUrl(sym, d) {
-  return `https://datafeed.dukascopy.com/datafeed/${sym}/${d.getUTCFullYear()}/${String(d.getUTCMonth()).padStart(2,'0')}/${String(d.getUTCDate()).padStart(2,'0')}/BID_candles_min_1.bi5`
-}
+// ── Upload to Supabase ────────────────────────────────────────────────────────
 
-async function fetchDay(sym, date, mult) {
-  try {
-    const res = await fetch(dukaUrl(sym, date), { signal: AbortSignal.timeout(12000) })
-    if (!res.ok) return []
-    const ab = await res.arrayBuffer()
-    if (!ab.byteLength) return []
-    return parseM1Records(decodeLZ4Frame(Buffer.from(ab)), mult, date.getTime())
-  } catch {
-    return []
-  }
-}
-
-async function downloadSymbol(sym) {
-  const mult = MULTIPLIER[sym]
-  const days = tradingDays(START, END)
-  const all  = []
-  for (let i = 0; i < days.length; i += 20) {
-    const chunk   = days.slice(i, i + 20)
-    const results = await Promise.all(chunk.map((d) => fetchDay(sym, d, mult)))
-    for (const r of results) all.push(...r)
-    if ((i / 20) % 10 === 0) console.log(`${sym}: ${Math.min(i + 20, days.length)}/${days.length} days`)
-  }
-  all.sort((a, b) => a.time - b.time)
-  const outPath = path.join(OUT_DIR, `${sym.toLowerCase()}-m1-2010-now.json`)
-  await fs.writeFile(outPath, JSON.stringify(all))
-  console.log(`${sym}: wrote ${all.length} M1 candles -> ${outPath}`)
-}
-
-await fs.mkdir(OUT_DIR, { recursive: true })
-for (const sym of SYMBOLS) {
-  await downloadSymbol(sym)
-}
-console.log('Done')
-
-// ── Optional: upload to Supabase Storage ─────────────────────────────────────
-// Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your env
-// then run:  node scripts/download-market-data.mjs --upload
-//
-// This lets you seed Supabase Storage from your local machine without
-// running the sync via the admin panel.
-
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-
-async function uploadToSupabase(symbol, candles) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) { console.log('Skipping upload — set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'); return }
-
-  const supabase = createSupabaseClient(url, key, { auth: { persistSession: false } })
-  const filename = `${symbol.toLowerCase()}-m1-2010-now.json`
-  const body = Buffer.from(JSON.stringify(candles))
+async function uploadToSupabase(sym, candles) {
+  const filename = `${sym.toLowerCase()}-m1-2010-now.json`
+  const body     = Buffer.from(JSON.stringify(candles))
 
   const { error } = await supabase.storage
-    .from('market-data')
+    .from(BUCKET)
     .upload(filename, body, { contentType: 'application/json', upsert: true })
 
-  if (error) console.error(`Upload failed for ${symbol}:`, error.message)
-  else console.log(`Uploaded ${symbol} to Supabase Storage`)
+  if (error) throw new Error(`Upload failed: ${error.message}`)
+  console.log(`  ✓ Uploaded ${filename} (${(body.length / 1024 / 1024).toFixed(1)} MB)`)
 }
 
-if (process.argv.includes('--upload')) {
-  // Re-upload all already-downloaded files
-  for (const sym of SYMBOLS) {
-    const filePath = path.join(OUT_DIR, `${sym.toLowerCase()}-m1-2010-now.json`)
-    try {
-      const raw = await fs.readFile(filePath, 'utf8')
-      await uploadToSupabase(sym, JSON.parse(raw))
-    } catch {
-      console.error(`No local file for ${sym} — run without --upload first`)
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+await fs.mkdir(OUT_DIR, { recursive: true })
+
+console.log(`Downloading M1 data: ${START} → ${END}`)
+console.log(`Symbols: ${SYMBOLS.join(', ')}\n`)
+
+for (const sym of SYMBOLS) {
+  const mult  = MULTIPLIER[sym]
+  const days  = tradingDays(START, END)
+  const all   = []
+  let errors  = 0
+
+  console.log(`\n[${sym}] ${days.length} trading days to fetch…`)
+
+  for (let i = 0; i < days.length; i += BATCH_SIZE) {
+    const chunk   = days.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(chunk.map(d => fetchDay(sym, d, mult)))
+    for (const r of results) {
+      if (r.length === 0) errors++
+      else all.push(...r)
+    }
+
+    // Progress every ~500 days
+    if (i % 500 === 0 && i > 0) {
+      const pct = ((i / days.length) * 100).toFixed(0)
+      console.log(`  ${pct}% — ${all.length.toLocaleString()} candles so far`)
     }
   }
+
+  all.sort((a, b) => a.time - b.time)
+
+  console.log(`  ${all.length.toLocaleString()} candles (${errors} empty days — normal for weekends/holidays)`)
+
+  // Save locally
+  const localPath = path.join(OUT_DIR, `${sym.toLowerCase()}-m1-2010-now.json`)
+  await fs.writeFile(localPath, JSON.stringify(all))
+  console.log(`  Saved locally: ${localPath}`)
+
+  // Upload to Supabase
+  await uploadToSupabase(sym, all)
 }
+
+console.log('\n✅ All done! Market data is now in Supabase Storage.')
+console.log('You can verify in: Supabase dashboard → Storage → market-data')

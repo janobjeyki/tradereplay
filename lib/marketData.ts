@@ -103,14 +103,24 @@ export function parseM1Records(buf: Buffer, mult: number, dayMs: number): Candle
 }
 
 /** Fetch + decode one day of M1 candles from Dukascopy */
-export async function fetchDayM1(symbol: string, day: Date, mult: number): Promise<Candle[]> {
+export async function fetchDayM1(
+  symbol: string,
+  day: Date,
+  mult: number,
+  log?: (msg: string) => void,
+): Promise<Candle[]> {
+  const url = dukascopyDayUrl(symbol, day)
   try {
-    const res = await fetch(dukascopyDayUrl(symbol, day), { signal: AbortSignal.timeout(12000) })
-    if (!res.ok) return []
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) })
+    if (!res.ok) {
+      log?.(`${symbol} ${day.toISOString().slice(0,10)} HTTP ${res.status}`)
+      return []
+    }
     const ab = await res.arrayBuffer()
-    if (!ab.byteLength) return []
+    if (!ab.byteLength) return [] // weekend / holiday — normal
     return parseM1Records(decodeLZ4Frame(Buffer.from(ab)), mult, day.getTime())
-  } catch {
+  } catch (err) {
+    log?.(`${symbol} ${day.toISOString().slice(0,10)} fetch error: ${String(err)}`)
     return []
   }
 }
