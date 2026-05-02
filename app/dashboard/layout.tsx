@@ -65,11 +65,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="app-shell">
         <div className="dashboard-shell">
           <aside className="shell-sidebar flex flex-col border-r" style={{ borderColor: 'var(--border-subtle)' }}>
-            <div className="px-7 pt-7 pb-5">
+            {/* Desktop logo */}
+            <div className="px-7 pt-7 pb-5 hidden-mobile-logo">
               <div className="flex flex-col gap-2">
                 <TradeLabLogo className="w-[140px]" />
                 <p className="text-[11px] pl-1" style={{ color:'var(--text-muted)' }}>Trading desk</p>
               </div>
+            </div>
+            {/* Mobile top bar logo */}
+            <div className="mobile-only-logo">
+              <TradeLabLogo className="w-[110px]" />
             </div>
 
             <nav className="flex-1 px-4">
@@ -207,6 +212,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </aside>
         </div>
       </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        {navItems.slice(0, 5).map(item => {
+          const active = pathname.startsWith(item.href)
+          return (
+            <Link key={item.href} href={item.href}
+              className={active ? 'active' : ''}
+              aria-current={active ? 'page' : undefined}>
+              <NavIcon name={item.icon as NavIconName} active={active} theme={theme} />
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
     </>
   )
 }

@@ -10,14 +10,14 @@ import { Button, Input, Select, Alert, ThemeToggle } from '@/components/ui'
 
 export default function SettingsPage() {
   const { t, lang, setLang } = useLang()
-  const { user, profile, signOut, refreshProfile } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const router = useRouter()
   const [displayName, setDisplayName] = useState('')
   const [savedMsg,    setSavedMsg]    = useState('')
   const [saving,      setSaving]      = useState(false)
-  const [npw,   setNpw]   = useState('')
-  const [pwMsg, setPwMsg] = useState('')
+  const [npw,         setNpw]         = useState('')
+  const [pwMsg,       setPwMsg]       = useState('')
 
   useEffect(() => { if (profile) setDisplayName(profile.display_name ?? '') }, [profile])
 
@@ -36,74 +36,78 @@ export default function SettingsPage() {
     setNpw(''); setTimeout(() => setPwMsg(''), 4000)
   }
 
-  const cardStyle = { background:'var(--bg-secondary)', border:'1px solid var(--border-subtle)' }
+  const cardStyle = { background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-7 py-5 shrink-0" style={{borderBottom:'1px solid var(--border-subtle)'}}>
-        <h1 className="font-black text-2xl tracking-tight" style={{color:'var(--text-primary)'}}>{t('accountSettings')}</h1>
+      <div className="px-4 sm:px-7 py-4 sm:py-5 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <h1 className="font-black text-xl sm:text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>
+          {t('accountSettings')}
+        </h1>
       </div>
-      <div className="flex-1 overflow-y-auto px-7 py-6 max-w-xl">
+
+      <div className="flex-1 overflow-y-auto px-4 sm:px-7 py-6 w-full max-w-xl">
 
         {/* Profile */}
-        <div className="rounded-xl p-6 mb-4" style={cardStyle}>
-          <h2 className="font-bold text-base mb-5" style={{color:'var(--text-primary)'}}>{t('accountSettings')}</h2>
+        <div className="rounded-xl p-5 sm:p-6 mb-4" style={cardStyle}>
+          <h2 className="font-bold text-base mb-4" style={{ color: 'var(--text-primary)' }}>Profile</h2>
           <div className="flex flex-col gap-4">
-            {savedMsg && <Alert type="success" message={savedMsg}/>}
-            <Input label={t('displayName')} value={displayName} placeholder="Your name" onChange={e=>setDisplayName(e.target.value)}/>
-            <Input label={t('emailLabel')} value={user?.email??''} disabled type="email" className="opacity-50 cursor-not-allowed"/>
-            <Select label={t('language')} value={lang} onChange={e=>setLang(e.target.value as Language)}>
+            {savedMsg && <Alert type="success" message={savedMsg} />}
+            <Input label={t('displayName')} value={displayName} placeholder="Your name"
+              onChange={e => setDisplayName(e.target.value)} />
+            <Input label={t('emailLabel')} value={user?.email ?? ''} disabled type="email"
+              className="opacity-50 cursor-not-allowed" />
+            <Select label={t('language')} value={lang} onChange={e => setLang(e.target.value as Language)}>
               <option value="en">EN — English</option>
               <option value="ru">RU — Русский</option>
               <option value="uz">UZ — O&apos;zbek</option>
             </Select>
-
-            {/* Theme toggle row */}
             <div>
-              <label className="text-[11px] tracking-wider uppercase block mb-2" style={{color:'var(--text-muted)'}}>
+              <label className="text-[11px] tracking-wider uppercase block mb-2" style={{ color: 'var(--text-muted)' }}>
                 Appearance
               </label>
               <div className="flex items-center gap-3">
-                <ThemeToggle theme={theme} onToggle={toggleTheme}/>
-                <span className="text-sm" style={{color:'var(--text-secondary)'}}>
+                <ThemeToggle theme={theme} onToggle={toggleTheme} />
+                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                   {theme === 'dark' ? 'Dark mode' : 'Light mode'}
                 </span>
               </div>
             </div>
-
-            <Button variant="primary" className="w-fit" loading={saving} onClick={saveProfile}>{t('saveChanges')}</Button>
+            <Button variant="primary" className="w-fit" loading={saving} onClick={saveProfile}>
+              {t('saveChanges')}
+            </Button>
           </div>
         </div>
 
-        <div className="rounded-xl p-6 mb-4" style={cardStyle}>
-          <h2 className="font-bold text-base mb-5" style={{color:'var(--text-primary)'}}>Subscription</h2>
+        {/* Subscription */}
+        <div className="rounded-xl p-5 sm:p-6 mb-4" style={cardStyle}>
+          <h2 className="font-bold text-base mb-4" style={{ color: 'var(--text-primary)' }}>Subscription</h2>
           <div className="flex flex-col gap-3">
-            <div className="rounded-lg px-4 py-3" style={{ background:'var(--bg-tertiary)', border:'1px solid var(--border-subtle)' }}>
-              <div className="flex items-center justify-between gap-3">
+            <div className="rounded-lg px-4 py-3" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                     {profile?.subscription_plan ?? 'Starter'}
                   </p>
-                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                     Status: {profile?.subscription_status ?? 'inactive'}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold" style={{ color:'var(--text-primary)' }}>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                     {Number(profile?.subscription_price ?? 0).toLocaleString()} UZS
                   </p>
-                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                     {profile?.payment_method ? `Click / ${String(profile.payment_method).toUpperCase()}` : 'No payment method'}
                   </p>
-                  <p className="text-xs mt-1" style={{ color:'var(--text-muted)' }}>
-                    {profile?.subscription_expires_at ? `Renews ${new Date(profile.subscription_expires_at).toLocaleDateString()}` : 'No renewal date'}
-                  </p>
+                  {profile?.subscription_expires_at && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                      Renews {new Date(profile.subscription_expires_at).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
-            <p className="text-sm" style={{ color:'var(--text-muted)' }}>
-              An active subscription is required to create new sessions.
-            </p>
             <Button variant="ghost" className="w-fit" onClick={() => router.push('/dashboard/subscription')}>
               Manage Subscription
             </Button>
@@ -111,22 +115,18 @@ export default function SettingsPage() {
         </div>
 
         {/* Password */}
-        <div className="rounded-xl p-6 mb-4" style={cardStyle}>
-          <h2 className="font-bold text-base mb-5" style={{color:'var(--text-primary)'}}>{t('changePassword')}</h2>
+        <div className="rounded-xl p-5 sm:p-6" style={cardStyle}>
+          <h2 className="font-bold text-base mb-4" style={{ color: 'var(--text-primary)' }}>{t('changePassword')}</h2>
           <div className="flex flex-col gap-4">
-            {pwMsg && <Alert type={pwMsg.includes('updated') ? 'success' : 'error'} message={pwMsg}/>}
-            <Input label={t('currentPassword')} type="password" placeholder="••••••••"/>
-            <Input label={t('newPassword')} type="password" placeholder="••••••••" value={npw} onChange={e=>setNpw(e.target.value)}/>
-            <Button variant="primary" className="w-fit" onClick={updatePassword}>{t('updatePassword')}</Button>
+            {pwMsg && <Alert type={pwMsg.includes('updated') ? 'success' : 'error'} message={pwMsg} />}
+            <Input label={t('newPassword')} type="password" placeholder="Min. 6 characters"
+              value={npw} onChange={e => setNpw(e.target.value)} />
+            <Button variant="primary" className="w-fit" onClick={updatePassword}>
+              {t('updatePassword')}
+            </Button>
           </div>
         </div>
 
-        {/* Danger zone */}
-        <div className="rounded-xl p-6" style={{background:'var(--bg-secondary)', border:'1px solid var(--red-muted)'}}>
-          <h2 className="font-bold text-base mb-2" style={{color:'var(--red)'}}>{t('dangerZone')}</h2>
-          <p className="text-sm mb-4" style={{color:'var(--text-muted)'}}>{t('deleteWarning')}</p>
-          <Button variant="danger" size="sm">{t('deleteAccount')}</Button>
-        </div>
       </div>
     </div>
   )

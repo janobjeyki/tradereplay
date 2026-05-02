@@ -177,7 +177,7 @@ export default function AnalyticsPage() {
             </div>
 
             {/* ── Charts row ── */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Equity Curve */}
               <div className="rounded-2xl p-5" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
                 <h3 className="font-semibold text-sm mb-3" style={{ color: 'var(--text-primary)' }}>Equity Curve</h3>
@@ -210,7 +210,7 @@ export default function AnalyticsPage() {
             </div>
 
             {/* ── Stat cards ── */}
-            <div className="grid grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Total PnL',      value: stats ? fmtMoney(stats.totalPnl) : '—',          color: stats && stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)' },
                 { label: 'Win Rate',        value: stats ? `${stats.winRate}%` : '—',               color: stats && stats.winRate >= 50 ? 'var(--green)' : 'var(--red)' },

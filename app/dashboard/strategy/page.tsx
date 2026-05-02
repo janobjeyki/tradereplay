@@ -140,7 +140,7 @@ export default function StrategyPage() {
             {!statsLoad && (
               <>
                 {/* Stat cards */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Total PnL',    value: fmtMoney(totalPnl),        color: totalPnl >= 0 ? 'var(--green)' : 'var(--red)' },
                     { label: 'Sessions',     value: String(sessions.length),    color: 'var(--text-primary)' },

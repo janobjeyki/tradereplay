@@ -64,7 +64,7 @@ export default function SessionsPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex justify-between items-center px-7 py-5 shrink-0"
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 px-4 sm:px-7 py-4 sm:py-5 shrink-0"
         style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <div>
           <h1 className="font-black text-2xl tracking-tight" style={{ color: 'var(--text-primary)' }}>
@@ -102,9 +102,9 @@ export default function SessionsPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3 animate-fade-in">
-            {/* Column headers */}
-            <div className="grid px-4 pb-1 gap-2"
-              style={{ gridTemplateColumns: '2fr 112px 172px 96px 112px 70px 100px 84px' }}>
+            {/* Desktop column headers — hidden on mobile */}
+            <div className="hidden md:grid px-4 pb-1 gap-2"
+              style={{ gridTemplateColumns: '2fr 100px 160px 90px 110px 64px 96px 80px' }}>
               {['Session', t('symbol'), t('period'), t('startCap'), t('endCap'), t('winRate'), '', ''].map((h, i) => (
                 <span key={i} className="text-[10px] uppercase tracking-widest"
                   style={{ color: 'var(--text-muted)' }}>{h}</span>
@@ -121,10 +121,6 @@ export default function SessionsPage() {
                   style={{
                     background: 'var(--bg-secondary)',
                     border: '1px solid var(--border-subtle)',
-                    display: 'grid',
-                    gridTemplateColumns: '2fr 112px 172px 96px 112px 70px 100px 84px',
-                    gap: '8px',
-                    alignItems: 'center',
                   }}
                   onMouseEnter={e => {
                     (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-border)'
@@ -135,38 +131,71 @@ export default function SessionsPage() {
                     ;(e.currentTarget as HTMLElement).style.transform = 'translateY(0)'
                   }}
                 >
-                  <div>
-                    <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{s.name}</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {s.is_completed ? '✓ Completed' : s.candle_index > 0 ? `Candle ${s.candle_index}` : 'Not started'}
-                    </p>
+                  {/* Desktop row */}
+                  <div className="hidden md:grid gap-2 items-center"
+                    style={{ gridTemplateColumns: '2fr 100px 160px 90px 110px 64px 96px 80px' }}>
+                    <div>
+                      <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{s.name}</p>
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {s.is_completed ? '✓ Completed' : s.candle_index > 0 ? `Candle ${s.candle_index}` : 'Not started'}
+                      </p>
+                    </div>
+                    <Badge variant="blue" className="justify-center text-center">{s.symbol}</Badge>
+                    <span className="font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                      {s.start_date}<br />{s.end_date}
+                    </span>
+                    <span className="font-mono text-sm" style={{ color: 'var(--text-primary)' }}>
+                      ${s.start_capital.toLocaleString()}
+                    </span>
+                    <Badge variant={isProfit ? 'green' : 'red'}>${s.end_capital.toLocaleString()}</Badge>
+                    <span className="font-mono text-sm" style={{
+                      color: winRate >= 50 ? 'var(--green)' : winRate > 0 ? 'var(--red)' : 'var(--text-muted)',
+                    }}>
+                      {winRate > 0 ? winRate + '%' : '—'}
+                    </span>
+                    <Button size="sm" variant="ghost" className="font-semibold"
+                      onClick={e => { e.stopPropagation(); router.push(`/workspace/${s.id}`) }}>
+                      {t('openSession')}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="font-semibold"
+                      onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
+                      style={{color: 'var(--red)', border: '1px solid var(--red-muted)'}}>
+                      Delete
+                    </Button>
                   </div>
-                  <div className="flex justify-center">
-                    <Badge variant="blue" className="justify-center text-center whitespace-nowrap w-full max-w-[110px]">{s.symbol}</Badge>
+
+                  {/* Mobile card layout */}
+                  <div className="flex md:hidden flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{s.name}</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                          {s.is_completed ? '✓ Completed' : s.candle_index > 0 ? `Candle ${s.candle_index}` : 'Not started'}
+                        </p>
+                      </div>
+                      <Badge variant="blue">{s.symbol}</Badge>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{s.start_date} → {s.end_date}</span>
+                      <Badge variant={isProfit ? 'green' : 'red'}>${s.end_capital.toLocaleString()}</Badge>
+                      {winRate > 0 && (
+                        <span className="text-xs font-mono" style={{ color: winRate >= 50 ? 'var(--green)' : 'var(--red)' }}>
+                          {winRate}% WR
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      <Button size="sm" variant="primary" className="flex-1"
+                        onClick={e => { e.stopPropagation(); router.push(`/workspace/${s.id}`) }}>
+                        {t('openSession')}
+                      </Button>
+                      <Button size="sm" variant="ghost"
+                        onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
+                        style={{color: 'var(--red)', border: '1px solid var(--red-muted)'}}>
+                        Delete
+                      </Button>
+                    </div>
                   </div>
-                  <span className="font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-                    {s.start_date}<br />{s.end_date}
-                  </span>
-                  <span className="font-mono text-sm" style={{ color: 'var(--text-primary)' }}>
-                    ${s.start_capital.toLocaleString()}
-                  </span>
-                  <Badge variant={isProfit ? 'green' : 'red'}>
-                    ${s.end_capital.toLocaleString()}
-                  </Badge>
-                  <span className="font-mono text-sm" style={{
-                    color: winRate >= 50 ? 'var(--green)' : winRate > 0 ? 'var(--red)' : 'var(--text-muted)',
-                  }}>
-                    {winRate > 0 ? winRate + '%' : '—'}
-                  </span>
-                  <Button size="sm" variant="ghost" className="font-semibold"
-                    onClick={e => { e.stopPropagation(); router.push(`/workspace/${s.id}`) }}>
-                    {t('openSession')}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="font-semibold"
-                    onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
-                    style={{color: 'var(--red)', border: '1px solid var(--red-muted)'}}>
-                    Delete
-                  </Button>
                 </div>
               )
             })}
@@ -339,7 +368,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
             className="w-full rounded-lg px-3 py-2 text-sm outline-none"
             style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}>
             {availableSymbols.length ? availableSymbols.map(item => (
-              <option key={item.symbol} value={item.symbol}>{item.symbol}{item.downloaded ? '' : ' (download on first use)'}</option>
+              <option key={item.symbol} value={item.symbol}>{item.symbol}</option>
             )) : <option value="XAUUSD">XAUUSD</option>}
           </select>
         </div>
