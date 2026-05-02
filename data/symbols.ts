@@ -18,13 +18,7 @@ export const SYMBOLS: Symbol[] = [
   { value: 'GBPAUD', label: 'GBP/AUD', category: 'Cross Pairs', basePrice: 1.9350, volatility: 0.0018, decimals: 5, pipSize: 0.0001, contractSize: 100000 },
   { value: 'GBPCAD', label: 'GBP/CAD', category: 'Cross Pairs', basePrice: 1.7340, volatility: 0.0015, decimals: 5, pipSize: 0.0001, contractSize: 100000 },
   // Metals  (1 lot = 100 troy oz)
-  { value: 'XAUUSD', label: 'XAU/USD (Gold)',   category: 'Metals', basePrice: 1950.0, volatility: 2.2,  decimals: 2, pipSize: 0.01, contractSize: 100 },
-  { value: 'XAGUSD', label: 'XAG/USD (Silver)', category: 'Metals', basePrice: 24.50,  volatility: 0.09, decimals: 3, pipSize: 0.01, contractSize: 5000 },
-  // Indices  (1 lot = 10 per point)
-  { value: 'US30',   label: 'US30 (Dow Jones)',  category: 'Indices', basePrice: 38500, volatility: 90, decimals: 0, pipSize: 1, contractSize: 10 },
-  { value: 'SPX500', label: 'S&P 500',           category: 'Indices', basePrice: 5100,  volatility: 14, decimals: 1, pipSize: 0.1, contractSize: 10 },
-  { value: 'NAS100', label: 'NASDAQ 100',        category: 'Indices', basePrice: 18200, volatility: 45, decimals: 1, pipSize: 0.1, contractSize: 10 },
-  { value: 'GER40',  label: 'DAX 40',            category: 'Indices', basePrice: 18100, volatility: 38, decimals: 1, pipSize: 0.1, contractSize: 10 },
+  { value: 'XAUUSD', label: 'XAU/USD (Gold)', category: 'Metals', basePrice: 1950.0, volatility: 2.2, decimals: 2, pipSize: 0.01, contractSize: 100 },
 ]
 
 export const SYMBOLS_BY_CATEGORY = SYMBOLS.reduce<Record<string, Symbol[]>>((acc, sym) => {

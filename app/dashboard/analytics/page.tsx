@@ -44,32 +44,36 @@ export default function AnalyticsPage() {
   const closedTrades = trades.filter(t => t.status === 'closed')
   const stats        = activeSess ? computeStats(trades, activeSess.start_capital) : null
 
-  // Monthly PnL grouped by month
+  // Monthly PnL — group by the simulated session month (trade creation order proxy)
+  // We use opened_at_idx position within the session date range to assign simulated dates
+  const sessionStart = activeSess ? new Date(activeSess.start_date).getTime() : 0
+  const sessionEnd   = activeSess ? new Date(activeSess.end_date).getTime()   : 0
+  const sessionRange = sessionEnd - sessionStart || 1
+
   const monthlyPnl = closedTrades.reduce<Record<string, number>>((acc, tr) => {
-    const d   = new Date(tr.created_at)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    acc[key]  = (acc[key] ?? 0) + (tr.pnl ?? 0)
+    // Interpolate a simulated date from opened_at_idx relative to total candle count
+    const totalCandles = closedTrades.length > 0
+      ? (closedTrades[closedTrades.length - 1].opened_at_idx || 1)
+      : 1
+    const frac = Math.min(1, (tr.opened_at_idx || 0) / totalCandles)
+    const simMs = sessionStart + frac * sessionRange
+    const d = new Date(simMs)
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+    acc[key] = (acc[key] ?? 0) + (tr.pnl ?? 0)
     return acc
   }, {})
 
-  // Days remaining
+  // Days remaining in the session replay range (not wall-clock days)
   const daysRemaining = activeSess
     ? Math.max(0, Math.ceil((new Date(activeSess.end_date).getTime() - Date.now()) / 86400000))
     : 0
 
-  // Gain/Loss filters
-  const now        = new Date()
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const startOfWk  = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime()
-  const startOfMo  = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-
-  const pnlSince = (since: number) =>
-    closedTrades.filter(t => new Date(t.created_at).getTime() >= since)
-      .reduce((a, t) => a + (t.pnl ?? 0), 0)
-
-  const dailyPnl   = pnlSince(startOfDay)
-  const weeklyPnl  = pnlSince(startOfWk)
-  const monthlyPnlSum = pnlSince(startOfMo)
+  // Session-scoped performance splits (first half vs second half of trades)
+  const half = Math.floor(closedTrades.length / 2)
+  const firstHalfPnl  = closedTrades.slice(0, half).reduce((a, t) => a + (t.pnl ?? 0), 0)
+  const secondHalfPnl = closedTrades.slice(half).reduce((a, t) => a + (t.pnl ?? 0), 0)
+  const bestTrade  = closedTrades.reduce((best, t) => (t.pnl ?? 0) > (best?.pnl ?? -Infinity) ? t : best, closedTrades[0] ?? null)
+  const worstTrade = closedTrades.reduce((worst, t) => (t.pnl ?? 0) < (worst?.pnl ?? Infinity) ? t : worst, closedTrades[0] ?? null)
 
   // Pagination
   const totalPages  = Math.max(1, Math.ceil(closedTrades.length / pageSize))
@@ -208,12 +212,12 @@ export default function AnalyticsPage() {
             {/* ── Stat cards ── */}
             <div className="grid grid-cols-6 gap-3">
               {[
-                { label: 'Total PnL',       value: stats ? fmtMoney(stats.totalPnl)          : '—', color: stats && stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)' },
-                { label: 'Win Rate',         value: stats ? `${stats.winRate}%`               : '—', color: stats && stats.winRate >= 50 ? 'var(--green)' : 'var(--red)' },
-                { label: 'Risk/Reward',      value: stats ? stats.avgRR.toFixed(2)            : '0', color: 'var(--text-primary)' },
-                { label: 'Month Gain/Loss',  value: fmtMoney(monthlyPnlSum),                         color: monthlyPnlSum >= 0 ? 'var(--green)' : 'var(--red)' },
-                { label: 'Week Gain/Loss',   value: fmtMoney(weeklyPnl),                             color: weeklyPnl >= 0 ? 'var(--green)' : 'var(--red)' },
-                { label: 'Daily Gain/Loss',  value: fmtMoney(dailyPnl),                              color: dailyPnl >= 0 ? 'var(--green)' : 'var(--red)' },
+                { label: 'Total PnL',      value: stats ? fmtMoney(stats.totalPnl) : '—',          color: stats && stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)' },
+                { label: 'Win Rate',        value: stats ? `${stats.winRate}%` : '—',               color: stats && stats.winRate >= 50 ? 'var(--green)' : 'var(--red)' },
+                { label: 'Risk/Reward',     value: stats ? stats.avgRR.toFixed(2) : '0',            color: 'var(--text-primary)' },
+                { label: 'Best Trade',      value: bestTrade ? fmtMoney(bestTrade.pnl ?? 0) : '—', color: 'var(--green)' },
+                { label: 'Worst Trade',     value: worstTrade ? fmtMoney(worstTrade.pnl ?? 0) : '—', color: 'var(--red)' },
+                { label: 'Profit Factor',   value: stats ? stats.profitFactor.toFixed(2) : '—',    color: stats && stats.profitFactor >= 1 ? 'var(--green)' : 'var(--red)' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-2xl p-5"
                   style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>

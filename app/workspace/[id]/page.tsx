@@ -251,11 +251,13 @@ export default function WorkspacePage() {
       }
     }
 
-    // Advance M1 absolute index by steps × TF_SECONDS worth of M1 candles
+    // Advance M1 absolute index by steps × TF_SECONDS — binary search O(log n)
     const targetTs = (m1All[curM1Abs]?.time ?? 0) + steps * TF_SECONDS[timeframe]
-    let newM1Abs   = curM1Abs
-    for (let j = m1All.length - 1; j >= 0; j--) {
-      if (m1All[j].time <= targetTs) { newM1Abs = j; break }
+    let lo = curM1Abs, hi = m1All.length - 1, newM1Abs = curM1Abs
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1
+      if (m1All[mid].time <= targetTs) { newM1Abs = mid; lo = mid + 1 }
+      else hi = mid - 1
     }
 
     const newBal     = parseFloat(Math.max(0, bal + deltaBal).toFixed(2))
@@ -289,6 +291,10 @@ export default function WorkspacePage() {
       candle_index: newM1Abs,   // absolute M1 index
       end_capital:  finalBal,
       is_completed: end >= c.length || breached,
+      win_rate: finalTrades.filter(t => t.status === 'closed').length > 0
+        ? parseFloat((finalTrades.filter(t => t.status === 'closed' && (t.pnl ?? 0) > 0).length
+            / finalTrades.filter(t => t.status === 'closed').length * 100).toFixed(1))
+        : 0,
     }).eq('id', id)
   }, [id, supabase, accountBreached, timeframe, closeAllOpenTrades])
 

@@ -18,7 +18,7 @@ const NAV = [
   { href:'/dashboard/settings',  label:'Settings', sub:'Theme and account', icon: 'settings' },
 ]
 
-const ADMIN_EMAILS = ['bekhruzjke@gmail.com']
+import { isAdminEmail } from '@/lib/admin/auth'
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard/sessions': { title: 'Trading Dashboard', subtitle: 'Create sessions, control replay, and launch into the chart quickly.' },
@@ -52,7 +52,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     title: 'BackTest Dashboard',
     subtitle: 'A focused control room for replay, analytics, and account access.',
   }
-  const isAdmin = ADMIN_EMAILS.includes((user?.email || '').toLowerCase())
+  const isAdmin = isAdminEmail(user?.email)
   const navItems = isAdmin
     ? [...NAV, { href:'/dashboard/admin', label:'Admin', sub:'Users and access', icon: 'admin' }]
     : NAV
