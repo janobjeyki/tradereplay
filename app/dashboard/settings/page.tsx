@@ -7,6 +7,12 @@ import { useLang } from '@/contexts/LangContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import type { Language } from '@/types'
 import { Button, Input, Select, Alert, ThemeToggle } from '@/components/ui'
+import { START_PLAN_LABEL, START_PLAN_PRICE_UZS } from '@/lib/payments/plans'
+
+function planDisplayName(plan: string | null | undefined) {
+  if (!plan) return START_PLAN_LABEL
+  return plan.charAt(0).toUpperCase() + plan.slice(1)
+}
 
 export default function SettingsPage() {
   const { t, lang, setLang } = useLang()
@@ -87,7 +93,7 @@ export default function SettingsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {profile?.subscription_plan ?? 'Starter'}
+                    {planDisplayName(profile?.subscription_plan)}
                   </p>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                     Status: {profile?.subscription_status ?? 'inactive'}
@@ -95,7 +101,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {Number(profile?.subscription_price ?? 0).toLocaleString()} UZS
+                    {(Number(profile?.subscription_price ?? 0) || START_PLAN_PRICE_UZS).toLocaleString()} UZS
                   </p>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                     {profile?.payment_method ? `Click / ${String(profile.payment_method).toUpperCase()}` : 'No payment method'}

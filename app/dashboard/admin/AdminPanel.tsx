@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Badge, Button, Input, Spinner } from '@/components/ui'
-import type { Profile, SubscriptionTransaction } from '@/types'
+import type { Profile, PromoCode, SubscriptionTransaction } from '@/types'
+import { PLANS, START_PLAN_KEY } from '@/lib/payments/plans'
 
 const SYNC_SYMBOLS = [
   'AUDUSD','EURAUD','EURCAD','EURGBP','EURJPY','EURUSD',
@@ -53,6 +54,16 @@ export function AdminPanel() {
   const [syncingData, setSyncingData]   = useState(false)
   const abortRef = useRef(false)
 
+  const [promoCodes, setPromoCodes]                 = useState<PromoCode[]>([])
+  const [promoLoading, setPromoLoading]             = useState(false)
+  const [promoCreating, setPromoCreating]           = useState(false)
+  const [promoDeletingId, setPromoDeletingId]       = useState('')
+  const [promoError, setPromoError]                 = useState('')
+  const [promoMessage, setPromoMessage]             = useState('')
+  const [promoProduct, setPromoProduct]             = useState<string>(START_PLAN_KEY)
+  const [promoPercent, setPromoPercent]             = useState('20')
+  const [promoEmail, setPromoEmail]                 = useState('')
+
   const selected = useMemo(
     () => users.find(item => item.id === selectedId) || users[0] || null,
     [selectedId, users]
@@ -69,6 +80,75 @@ export function AdminPanel() {
   }, [])
 
   useEffect(() => { void fetchUsers('') }, [fetchUsers])
+
+  const fetchPromoCodes = useCallback(async () => {
+    setPromoLoading(true); setPromoError('')
+    const res = await fetch('/api/admin/promo-codes', { cache: 'no-store' })
+    const payload = await res.json()
+    if (!res.ok) {
+      setPromoError(payload.error || 'Failed to load promo codes')
+      setPromoCodes([])
+    } else {
+      setPromoCodes(payload.promoCodes || [])
+    }
+    setPromoLoading(false)
+  }, [])
+
+  useEffect(() => { void fetchPromoCodes() }, [fetchPromoCodes])
+
+  async function createPromoCode() {
+    const percent = Number(promoPercent)
+    if (!Number.isFinite(percent) || percent < 1 || percent > 100) {
+      setPromoError('Discount percent must be between 1 and 100')
+      return
+    }
+
+    setPromoCreating(true); setPromoError(''); setPromoMessage('')
+    const res = await fetch('/api/admin/promo-codes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product: promoProduct,
+        discountPercent: percent,
+        assignedEmail: promoEmail.trim() || undefined,
+      }),
+    })
+    const payload = await res.json()
+
+    if (!res.ok) {
+      setPromoError(payload.error || 'Failed to create promo code')
+      setPromoCreating(false)
+      return
+    }
+
+    setPromoCodes(prev => [payload.promoCode as PromoCode, ...prev])
+    setPromoMessage(`Promo code ${payload.promoCode?.code} generated.`)
+    setPromoEmail('')
+    setPromoCreating(false)
+  }
+
+  async function deletePromoCode(id: string) {
+    if (!confirm('Delete this promo code?')) return
+    setPromoDeletingId(id); setPromoError(''); setPromoMessage('')
+    const res = await fetch(`/api/admin/promo-codes?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const payload = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setPromoError(payload.error || 'Failed to delete promo code')
+    } else {
+      setPromoCodes(prev => prev.filter(item => item.id !== id))
+      setPromoMessage('Promo code removed.')
+    }
+    setPromoDeletingId('')
+  }
+
+  async function copyPromoCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code)
+      setPromoMessage(`Copied ${code} to clipboard.`)
+    } catch {
+      setPromoError('Clipboard access denied — copy manually.')
+    }
+  }
 
   function savingKey(action: 'gift' | 'extend' | 'cancel', months?: number, lifetime = false) {
     return `${action}-${months ?? (lifetime ? 'lifetime' : 'default')}`
@@ -333,6 +413,105 @@ export function AdminPanel() {
           )}
         </section>
       </div>
+
+      <section className="mt-5 rounded-2xl p-5" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
+        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl font-black">Promo Codes</h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+              Generate discount codes for the Start plan. Optionally lock a code to a single user&apos;s email.
+            </p>
+          </div>
+          <Button variant="ghost" loading={promoLoading} onClick={() => void fetchPromoCodes()}>Refresh</Button>
+        </div>
+
+        {promoError   && <div className="mt-3"><Alert type="error"   message={promoError} /></div>}
+        {promoMessage && <div className="mt-3"><Alert type="success" message={promoMessage} /></div>}
+
+        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_140px_1fr_auto]">
+          <div>
+            <label className="text-[11px] uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Product</label>
+            <select
+              value={promoProduct}
+              onChange={e => setPromoProduct(e.target.value)}
+              className="mt-1 w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+            >
+              {PLANS.map(plan => (
+                <option key={plan.key} value={plan.key}>
+                  {plan.label} — {plan.price.toLocaleString()} UZS
+                </option>
+              ))}
+            </select>
+          </div>
+          <Input
+            label="Discount %"
+            type="number"
+            min={1}
+            max={100}
+            value={promoPercent}
+            onChange={e => setPromoPercent(e.target.value)}
+          />
+          <Input
+            label="Restrict to email (optional)"
+            type="email"
+            placeholder="user@gmail.com"
+            value={promoEmail}
+            onChange={e => setPromoEmail(e.target.value)}
+          />
+          <div className="flex items-end">
+            <Button variant="primary" loading={promoCreating} onClick={createPromoCode}>
+              Generate Code
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          {promoLoading ? (
+            <div className="flex h-20 items-center justify-center"><Spinner /></div>
+          ) : promoCodes.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No promo codes generated yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {promoCodes.map(code => {
+                const used = Boolean(code.used_at)
+                return (
+                  <div key={code.id} className="grid items-center gap-3 rounded-lg px-3 py-2 md:grid-cols-[180px_120px_1fr_180px_auto]"
+                    style={{ background: 'var(--bg-tertiary)' }}>
+                    <button
+                      type="button"
+                      onClick={() => void copyPromoCode(code.code)}
+                      className="text-left font-mono text-sm font-bold tracking-wider"
+                      style={{ color: 'var(--text-primary)' }}
+                      title="Click to copy"
+                    >
+                      {code.code}
+                    </button>
+                    <Badge variant="blue">{code.discount_percent}% off</Badge>
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      {code.product} · {code.assigned_email || 'any user'}
+                    </span>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {used ? `Used ${new Date(code.used_at as string).toLocaleString()}` : `Created ${new Date(code.created_at).toLocaleDateString()}`}
+                    </span>
+                    <div className="flex items-center justify-end gap-2">
+                      {used && <Badge variant="green">Redeemed</Badge>}
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        loading={promoDeletingId === code.id}
+                        onClick={() => void deletePromoCode(code.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

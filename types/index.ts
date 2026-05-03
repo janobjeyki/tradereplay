@@ -19,6 +19,18 @@ export interface Profile {
   updated_at: string
 }
 
+export interface PromoCode {
+  id: string
+  code: string
+  product: string
+  discount_percent: number
+  assigned_email: string | null
+  used_by_user_id: string | null
+  used_at: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface SubscriptionTransaction {
   id: string
   user_id: string

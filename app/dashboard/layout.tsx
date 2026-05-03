@@ -19,6 +19,12 @@ const NAV = [
 ]
 
 import { isAdminEmail } from '@/lib/admin/auth'
+import { START_PLAN_LABEL } from '@/lib/payments/plans'
+
+function planDisplayName(plan: string | null | undefined) {
+  if (!plan) return START_PLAN_LABEL
+  return plan.charAt(0).toUpperCase() + plan.slice(1)
+}
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard/sessions': { title: 'Trading Dashboard', subtitle: 'Create sessions, control replay, and launch into the chart quickly.' },
@@ -159,7 +165,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="grid grid-cols-3 gap-3 mt-6 text-center">
                 <div>
                   <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Plan</p>
-                  <p className="font-semibold mt-2">{profile?.subscription_plan ?? 'Starter'}</p>
+                  <p className="font-semibold mt-2">{planDisplayName(profile?.subscription_plan)}</p>
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Mode</p>
