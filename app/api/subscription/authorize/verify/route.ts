@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient()
     const { data: transaction, error } = await admin
       .from('subscription_transactions')
-      .select('id, user_id, amount, status, reference, payment_method, card_last4, card_holder_name, card_exp_month, card_exp_year, provider_card_token')
+      .select('id, user_id, amount, status, reference, payment_method, card_last4, card_holder_name, card_exp_month, card_exp_year, provider_card_token, promo_code_id')
       .eq('user_id', user.id)
       .eq('reference', reference)
       .maybeSingle()
@@ -54,6 +54,14 @@ export async function POST(req: NextRequest) {
       reference: transaction.reference,
       provider_card_token: providerStatus.token || transaction.provider_card_token,
     }, payment.paymentId || providerStatus.bindingId, providerStatus.token)
+
+    if (transaction.promo_code_id) {
+      await admin
+        .from('promo_codes')
+        .update({ used_by_user_id: user.id, used_at: new Date().toISOString() })
+        .eq('id', transaction.promo_code_id)
+        .is('used_at', null)
+    }
 
     const { data: refreshed, error: refreshedError } = await admin
       .from('subscription_transactions')
