@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminUser } from '@/lib/admin/requireAdmin'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { START_PLAN_KEY } from '@/lib/payments/plans'
 
 type AdminAction = 'gift' | 'extend' | 'cancel'
 
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   } else if (action === 'gift') {
     update = {
       subscription_status: 'active',
-      subscription_plan: 'starter',
+      subscription_plan: START_PLAN_KEY,
       subscription_price: 0,
       subscription_started_at: now.toISOString(),
       subscription_expires_at: lifetime ? null : addMonths(now, months).toISOString(),
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
     const base = currentExpiry > now ? currentExpiry : now
     update = {
       subscription_status: 'active',
-      subscription_plan: 'starter',
+      subscription_plan: START_PLAN_KEY,
       subscription_expires_at: addMonths(base, months).toISOString(),
     }
   }

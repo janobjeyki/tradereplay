@@ -129,7 +129,7 @@ export default function LandingPage() {
 
       <section id="pricing" className="px-10 pb-16 max-w-5xl mx-auto w-full">
         <div className="rounded-2xl p-7" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
-          <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>Starter</p>
+          <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>Start</p>
           <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-3xl font-black">99,000 UZS / month</h2>

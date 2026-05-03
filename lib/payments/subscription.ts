@@ -1,4 +1,5 @@
 import type { CardNetwork } from '@/lib/payments/click'
+import { START_PLAN_KEY } from '@/lib/payments/plans'
 
 const SUBSCRIPTION_INTERVAL_MONTHS = 1
 
@@ -47,7 +48,7 @@ export async function activateSubscriptionForTransaction(
     .from('profiles')
     .update({
       subscription_status: 'active',
-      subscription_plan: 'starter',
+      subscription_plan: START_PLAN_KEY,
       subscription_price: transaction.amount,
       payment_method: transaction.payment_method,
       card_holder_name: transaction.card_holder_name,

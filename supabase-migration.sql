@@ -29,7 +29,7 @@ alter table trades add constraint trades_status_check
 alter table profiles
   add column if not exists subscription_status text not null default 'inactive'
     check (subscription_status in ('inactive', 'active', 'canceled')),
-  add column if not exists subscription_plan text not null default 'starter',
+  add column if not exists subscription_plan text not null default 'start',
   add column if not exists subscription_price numeric(10,2) not null default 0,
   add column if not exists payment_method text
     check (payment_method in ('humo', 'uzcard', 'visa')),
@@ -80,3 +80,26 @@ drop policy if exists "Users can read own subscription transactions" on subscrip
 create policy "Users can read own subscription transactions" on subscription_transactions for select using (auth.uid() = user_id);
 drop policy if exists "Users can create own subscription transactions" on subscription_transactions;
 create policy "Users can create own subscription transactions" on subscription_transactions for insert with check (auth.uid() = user_id);
+
+-- Migrate any legacy 'starter' values
+update profiles set subscription_plan = 'start' where subscription_plan = 'starter';
+alter table profiles alter column subscription_plan set default 'start';
+
+-- Promo codes
+create table if not exists promo_codes (
+  id              uuid primary key default gen_random_uuid(),
+  code            text not null unique,
+  product         text not null default 'start',
+  discount_percent integer not null check (discount_percent between 1 and 100),
+  assigned_email  text,
+  used_by_user_id uuid references auth.users on delete set null,
+  used_at         timestamptz,
+  created_by      uuid references auth.users on delete set null,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists promo_codes_assigned_email_idx on promo_codes (lower(assigned_email));
+
+alter table promo_codes enable row level security;
+drop policy if exists "Promo codes service access" on promo_codes;
+create policy "Promo codes service access" on promo_codes for all using (false) with check (false);

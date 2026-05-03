@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Profile, SubscriptionTransaction } from '@/types'
 import { Alert, Badge, Button, Input } from '@/components/ui'
+import { START_PLAN_LABEL, START_PLAN_PRICE_UZS } from '@/lib/payments/plans'
 
 export type PaymentMethod = 'humo' | 'uzcard'
 
@@ -60,7 +61,8 @@ export function SubscriptionManager({
   const [error, setError] = useState('')
 
   const isActive = profile?.subscription_status === 'active'
-  const price = Number(profile?.subscription_price ?? 0)
+  const profilePrice = Number(profile?.subscription_price ?? 0)
+  const price = profilePrice > 0 ? profilePrice : START_PLAN_PRICE_UZS
   const expiresAt = profile?.subscription_expires_at ? new Date(profile.subscription_expires_at) : null
   const lastAuthorized = useMemo(
     () => transactions.find(t => t.status === 'authorized'),
@@ -215,9 +217,9 @@ export function SubscriptionManager({
       <div className="rounded-xl p-4" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(14,165,233,0.08))', border: '1px solid var(--accent-border)' }}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>Starter Access</p>
+            <p className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>{START_PLAN_LABEL} Plan</p>
             <h3 className="text-xl font-black mt-1" style={{ color: 'var(--text-primary)' }}>
-              {price > 0 ? `${price.toLocaleString()} UZS` : 'Free trial'}
+              {price.toLocaleString()} UZS
             </h3>
             <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
               Cards are linked through Click Merchant API. Session creation stays locked until card verification finishes successfully.
