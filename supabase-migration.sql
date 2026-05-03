@@ -103,3 +103,10 @@ create index if not exists promo_codes_assigned_email_idx on promo_codes (lower(
 alter table promo_codes enable row level security;
 drop policy if exists "Promo codes service access" on promo_codes;
 create policy "Promo codes service access" on promo_codes for all using (false) with check (false);
+
+-- Link promo redemption to a transaction.
+alter table subscription_transactions
+  add column if not exists promo_code_id uuid references promo_codes(id) on delete set null;
+
+create index if not exists subscription_transactions_promo_code_idx
+  on subscription_transactions (promo_code_id);

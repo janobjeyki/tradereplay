@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { startAuthorization, type CardNetwork } from '@/lib/payments/click'
+import { lookupPromoCode } from '@/lib/payments/promo'
+import { START_PLAN_KEY } from '@/lib/payments/plans'
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,15 +19,36 @@ export async function POST(req: NextRequest) {
     const paymentMethod = body.paymentMethod as CardNetwork
     const cardNumber = String(body.cardNumber ?? '')
     const cardExpire = String(body.cardExpire ?? '')
+    const promoCodeRaw = String(body.promoCode ?? '').trim()
+    const product = String(body.product ?? START_PLAN_KEY).trim()
 
     if (!['humo', 'uzcard'].includes(paymentMethod)) {
       return NextResponse.json({ error: 'Unsupported payment method' }, { status: 400 })
     }
 
     const authorization = await startAuthorization(paymentMethod, cardNumber, cardExpire)
+
+    let amount = authorization.verificationAmount
+    let promoCodeId: string | null = null
+    let discountPercent = 0
+
+    if (promoCodeRaw) {
+      const admin = createAdminClient()
+      const { promoCode, discountedAmount } = await lookupPromoCode(
+        admin,
+        promoCodeRaw,
+        product,
+        authorization.verificationAmount,
+        { id: user.id, email: user.email ?? null },
+      )
+      amount = discountedAmount
+      promoCodeId = promoCode.id
+      discountPercent = promoCode.discount_percent
+    }
+
     const { error: txError } = await db.from('subscription_transactions').insert({
       user_id: user.id,
-      amount: authorization.verificationAmount,
+      amount,
       currency: authorization.verificationCurrency,
       payment_method: paymentMethod,
       card_last4: authorization.last4,
@@ -35,6 +59,7 @@ export async function POST(req: NextRequest) {
       provider_card_token: authorization.reference,
       status: 'pending',
       reference: authorization.reference,
+      promo_code_id: promoCodeId,
     })
 
     if (txError) {
@@ -44,10 +69,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       reference: authorization.reference,
-      verificationAmount: authorization.verificationAmount,
+      verificationAmount: amount,
       verificationCurrency: authorization.verificationCurrency,
       verificationPhone: authorization.verificationPhone,
       verificationWaitMs: authorization.verificationWaitMs,
+      discountPercent,
+      promoApplied: Boolean(promoCodeId),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to start authorization'
