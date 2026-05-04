@@ -385,7 +385,7 @@ export default function LandingPage() {
         className="fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-out"
         style={{ transform: navHidden ? 'translateY(-130%)' : 'translateY(0)' }}>
         <div
-          className="flex items-center justify-between px-4 sm:px-6 md:px-10 py-3 sm:py-3.5 gap-2 sm:gap-4 transition-all duration-300"
+          className="flex items-center justify-between px-4 sm:px-6 md:px-10 py-2 sm:py-2.5 gap-2 sm:gap-3 transition-all duration-300"
           style={{
             background: navScrolled
               ? 'linear-gradient(90deg, rgba(244,87,131,0.85) 0%, rgba(108,71,255,0.85) 50%, rgba(26,36,55,0.92) 100%)'
@@ -442,7 +442,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero — extra top padding for fixed nav */}
-      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-32 sm:pt-36 pb-0 text-center relative overflow-hidden">
+      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-28 sm:pt-32 pb-0 text-center relative overflow-hidden">
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1100px] h-[1100px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(circle, rgba(244,87,131,0.10) 0%, transparent 60%)' }}
@@ -528,7 +528,7 @@ export default function LandingPage() {
       </div>
 
       {/* Big alternating feature blocks */}
-      <section id="features" className="px-6 md:px-10 py-24 max-w-6xl mx-auto w-full">
+      <section id="features" className="scroll-mt-24 px-6 md:px-10 py-24 max-w-6xl mx-auto w-full">
         <div className="text-center mb-20">
           <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>{t('bigFeatEyebrow')}</span>
           <h2 className="text-3xl md:text-[44px] font-black mt-3 mb-5 tracking-tight" style={{ lineHeight: 1.15, paddingBottom: '0.1em' }}>
@@ -677,7 +677,7 @@ export default function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="px-6 md:px-10 py-24">
+      <section id="how" className="scroll-mt-24 px-6 md:px-10 py-24">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
             <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>Process</span>
@@ -703,7 +703,7 @@ export default function LandingPage() {
       {/* Testimonials */}
       <section
         id="testimonials"
-        className="px-6 md:px-10 py-24"
+        className="scroll-mt-24 px-6 md:px-10 py-24"
         style={{ background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
@@ -743,7 +743,7 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="px-6 md:px-10 py-24">
+      <section id="pricing" className="scroll-mt-24 px-6 md:px-10 py-24">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-12">
             <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>{t('pricing')}</span>
