@@ -385,7 +385,7 @@ export default function LandingPage() {
         className="fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-out"
         style={{ transform: navHidden ? 'translateY(-130%)' : 'translateY(0)' }}>
         <div
-          className="flex items-center justify-between px-4 sm:px-6 md:px-10 py-2 sm:py-2.5 gap-2 sm:gap-3 transition-all duration-300"
+          className="flex items-center justify-between px-4 sm:px-6 md:px-10 gap-2 sm:gap-3 transition-all duration-300"
           style={{
             background: navScrolled
               ? 'linear-gradient(90deg, rgba(244,87,131,0.85) 0%, rgba(108,71,255,0.85) 50%, rgba(26,36,55,0.92) 100%)'
@@ -396,7 +396,7 @@ export default function LandingPage() {
             WebkitBackdropFilter: 'blur(14px)',
           }}>
           <div className="flex items-center gap-2.5 shrink-0">
-            <TradeLabLogo className="w-[110px] sm:w-[130px]" />
+            <TradeLabLogo className="h-9 w-auto" />
           </div>
 
           <div className="hidden lg:flex items-center gap-6 text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
@@ -448,12 +448,6 @@ export default function LandingPage() {
           style={{ background: 'radial-gradient(circle, rgba(244,87,131,0.10) 0%, transparent 60%)' }}
         />
 
-        <span
-          className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-full mb-7 relative z-10"
-          style={{ background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-          <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'var(--accent)', boxShadow: '0 0 6px var(--accent)' }} />
-          {t('heroBadge')}
-        </span>
 
         {/* leading-[1.18] + paddingBottom prevents descenders (g, y) from being clipped by background-clip:text */}
         <h1
