@@ -387,16 +387,22 @@ export default function LandingPage() {
         <div
           className="flex items-center justify-between px-4 sm:px-6 md:px-10 h-[72px] gap-3 sm:gap-4 transition-all duration-300"
           style={{
-            background: navScrolled
-              ? 'linear-gradient(90deg, rgba(22,29,44,0.96) 0%, rgba(34,45,68,0.94) 50%, rgba(15,22,35,0.96) 100%)'
-              : 'linear-gradient(90deg, rgba(26,36,55,0.92) 0%, rgba(37,50,75,0.9) 50%, rgba(19,27,40,0.94) 100%)',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: navScrolled ? '0 14px 32px rgba(3, 7, 18, 0.5)' : '0 10px 26px rgba(3, 7, 18, 0.4)',
+            background: theme === 'light'
+              ? (navScrolled
+                ? 'linear-gradient(90deg, rgba(245,249,255,0.96) 0%, rgba(234,241,252,0.94) 50%, rgba(225,235,249,0.96) 100%)'
+                : 'linear-gradient(90deg, rgba(252,255,255,0.92) 0%, rgba(241,247,255,0.9) 50%, rgba(233,241,252,0.94) 100%)')
+              : (navScrolled
+                ? 'linear-gradient(90deg, rgba(22,29,44,0.96) 0%, rgba(34,45,68,0.94) 50%, rgba(15,22,35,0.96) 100%)'
+                : 'linear-gradient(90deg, rgba(26,36,55,0.92) 0%, rgba(37,50,75,0.9) 50%, rgba(19,27,40,0.94) 100%)'),
+            borderBottom: theme === 'light' ? '1px solid rgba(71,94,141,0.2)' : '1px solid rgba(255,255,255,0.08)',
+            boxShadow: theme === 'light'
+              ? (navScrolled ? '0 12px 28px rgba(53, 76, 120, 0.16)' : '0 8px 22px rgba(53, 76, 120, 0.12)')
+              : (navScrolled ? '0 14px 32px rgba(3, 7, 18, 0.5)' : '0 10px 26px rgba(3, 7, 18, 0.4)'),
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
           }}>
-          <div className="flex items-center gap-3.5 shrink-0 rounded-xl px-2 py-1" style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <TradeLabLogo className="h-12 w-auto" />
+          <div className="flex items-center gap-3.5 shrink-0">
+            <TradeLabLogo className="h-12 w-12" />
           </div>
 
           <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium" style={{ color: 'var(--text-secondary)' }}>
