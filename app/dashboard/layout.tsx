@@ -232,6 +232,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           )
         })}
+        <button
+          type="button"
+          onClick={handleLogout}
+          aria-label="Logout"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 8l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M12 4H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span>{t('logout')}</span>
+        </button>
       </nav>
     </>
   )
