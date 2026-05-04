@@ -299,8 +299,26 @@ export default function LandingPage() {
   const { theme, toggleTheme } = useTheme()
 
   const [navScrolled, setNavScrolled] = useState(false)
+  const [navVisible, setNavVisible] = useState(true)
+
   useEffect(() => {
-    const onScroll = () => setNavScrolled(window.scrollY > 12)
+    let lastScrollY = window.scrollY
+
+    const onScroll = () => {
+      const currentY = window.scrollY
+      setNavScrolled(currentY > 12)
+
+      if (currentY <= 16) {
+        setNavVisible(true)
+      } else if (currentY > lastScrollY) {
+        setNavVisible(false)
+      } else if (currentY < lastScrollY) {
+        setNavVisible(true)
+      }
+
+      lastScrollY = currentY
+    }
+
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -363,7 +381,7 @@ export default function LandingPage() {
 
       {/* Nav — fixed to top, full width */}
       <nav
-        className="fixed top-0 left-0 right-0 z-50">
+        className={`fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ${navVisible ? 'translate-y-0' : '-translate-y-full'}`}>
         <div
           className="flex items-center justify-between px-4 sm:px-6 md:px-10 h-[72px] gap-3 sm:gap-4 transition-all duration-300"
           style={{
