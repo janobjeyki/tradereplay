@@ -385,7 +385,7 @@ export default function LandingPage() {
         className="fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-out"
         style={{ transform: navHidden ? 'translateY(-130%)' : 'translateY(0)' }}>
         <div
-          className="flex items-center justify-between px-4 sm:px-6 md:px-10 gap-2 sm:gap-3 transition-all duration-300"
+          className="flex items-center justify-between px-4 sm:px-6 md:px-10 h-[72px] gap-3 sm:gap-4 transition-all duration-300"
           style={{
             background: navScrolled
               ? 'linear-gradient(90deg, rgba(244,87,131,0.85) 0%, rgba(108,71,255,0.85) 50%, rgba(26,36,55,0.92) 100%)'
@@ -395,11 +395,11 @@ export default function LandingPage() {
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
           }}>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <TradeLabLogo className="h-9 w-auto" />
+          <div className="flex items-center gap-3.5 shrink-0">
+            <TradeLabLogo className="h-14 w-auto" />
           </div>
 
-          <div className="hidden lg:flex items-center gap-6 text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+          <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium" style={{ color: 'var(--text-secondary)' }}>
             <a href="#features" className="transition-colors hover:text-[var(--text-primary)]">{t('about')}</a>
             <a href="#how" className="transition-colors hover:text-[var(--text-primary)]">{t('howTitle')}</a>
             <a href="#testimonials" className="transition-colors hover:text-[var(--text-primary)]">{t('reviews')}</a>
@@ -411,7 +411,7 @@ export default function LandingPage() {
             <select
               value={lang}
               onChange={e => setLang(e.target.value as Language)}
-              className="hidden sm:block h-9 min-w-[68px] rounded-lg px-3 text-[12px] font-semibold outline-none cursor-pointer appearance-none pr-7 transition-colors"
+              className="hidden sm:block h-12 min-w-[86px] rounded-xl px-4 text-[14px] font-semibold outline-none cursor-pointer appearance-none pr-7 transition-colors"
               style={{
                 background: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-default)',
@@ -424,16 +424,16 @@ export default function LandingPage() {
               <option value="ru">RU</option>
               <option value="uz">UZ</option>
             </select>
-            <ThemeToggle theme={theme} onToggle={toggleTheme} className="h-9 w-9 sm:h-9 sm:w-9 rounded-lg hover:-translate-y-0.5" />
+            <ThemeToggle theme={theme} onToggle={toggleTheme} className="h-12 w-12 rounded-xl hover:-translate-y-0.5" />
             <Link
               href="/auth/login"
-              className="hidden sm:inline-flex h-9 items-center justify-center rounded-lg px-4 text-[12px] font-semibold transition-all hover:-translate-y-0.5"
+              className="hidden sm:inline-flex h-12 items-center justify-center rounded-xl px-5 text-[14px] font-semibold transition-all hover:-translate-y-0.5"
               style={{ color: 'var(--text-secondary)', border: '1px solid var(--border-default)', background: 'var(--bg-tertiary)' }}>
               {t('signIn')}
             </Link>
             <Link
               href="/auth/register"
-              className="inline-flex h-9 items-center justify-center rounded-lg px-3 sm:px-4 text-[12px] font-bold transition-all hover:-translate-y-0.5 text-white whitespace-nowrap"
+              className="inline-flex h-12 items-center justify-center rounded-xl px-4 sm:px-5 text-[14px] font-bold transition-all hover:-translate-y-0.5 text-white whitespace-nowrap"
               style={{ background: 'var(--accent)', boxShadow: '0 10px 22px rgba(244, 87, 131, 0.24)' }}>
               {t('getStarted')}
             </Link>
@@ -442,7 +442,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero — extra top padding for fixed nav */}
-      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-28 sm:pt-32 pb-0 text-center relative overflow-hidden">
+      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-40 sm:pt-44 pb-0 text-center relative overflow-hidden">
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1100px] h-[1100px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(circle, rgba(244,87,131,0.10) 0%, transparent 60%)' }}
