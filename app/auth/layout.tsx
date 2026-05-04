@@ -25,7 +25,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="hidden md:flex flex-col justify-between px-10 py-12" style={{borderRight:'1px solid var(--border-subtle)', background:promoBackground}}>
           <div>
             <Link href="/landing" className="inline-flex items-center gap-2.5 mb-8 group">
-              <TradeLabLogo className="w-[148px]" />
+              <TradeLabLogo className="w-[150px]" />
             </Link>
             <p className="text-[11px] uppercase tracking-[0.18em]" style={{color:'var(--text-muted)'}}>Trading workspace</p>
             <h1 className="font-black text-5xl leading-[1.02] mt-4">Enter the desk with a clearer edge.</h1>
@@ -41,7 +41,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="px-6 py-8 md:px-8 md:py-10 flex items-center">
           <div className="text-center mb-8 md:hidden">
             <Link href="/landing" className="inline-flex items-center gap-2.5 mb-2 group">
-              <TradeLabLogo className="w-[144px]" />
+              <TradeLabLogo className="w-[146px]" />
             </Link>
           </div>
           <div className="w-full">

@@ -402,7 +402,7 @@ export default function LandingPage() {
             WebkitBackdropFilter: 'blur(14px)',
           }}>
           <div className="flex items-center gap-3.5 shrink-0">
-            <TradeLabLogo className="h-12 w-12" />
+            <TradeLabLogo className="h-[50px] w-[50px]" />
           </div>
 
           <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium" style={{ color: 'var(--text-secondary)' }}>

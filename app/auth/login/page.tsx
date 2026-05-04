@@ -38,7 +38,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TradeLabLogo className="w-[130px] mx-auto" />
+      <TradeLabLogo className="w-[132px] mx-auto" />
       <div className="text-center">
         <h1 className="font-black text-2xl">{resetMode ? 'Reset Password' : t('login')}</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>

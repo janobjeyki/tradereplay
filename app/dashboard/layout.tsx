@@ -74,13 +74,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Desktop logo */}
             <div className="px-7 pt-7 pb-5 hidden-mobile-logo">
               <div className="flex flex-col gap-2">
-                <TradeLabLogo className="w-[140px]" />
+                <TradeLabLogo className="w-[142px]" />
                 <p className="text-[11px] pl-1" style={{ color:'var(--text-muted)' }}>Trading desk</p>
               </div>
             </div>
             {/* Mobile top bar logo */}
             <div className="mobile-only-logo">
-              <TradeLabLogo className="w-[110px]" />
+              <TradeLabLogo className="w-[112px]" />
             </div>
 
             <nav className="flex-1 px-4">
