@@ -173,7 +173,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-widest" style={{ color:'var(--text-muted)' }}>Lang</p>
-                  <p className="font-semibold mt-2">{profile?.language ?? 'en'}</p>
+                  <p className="font-semibold mt-2">{profile?.language ?? 'uz'}</p>
                 </div>
               </div>
             </div>
