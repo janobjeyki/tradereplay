@@ -356,7 +356,7 @@ function CreateSessionModal({ onClose, onCreate }: { onClose: () => void; onCrea
           <div className="flex items-center justify-between">
             <div>
               <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>Market Pair</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>M1 data from Dukascopy via Supabase Storage · 2010–today</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>M1 market data · 2010–today</p>
             </div>
             <Badge variant="blue">{symbol}</Badge>
           </div>

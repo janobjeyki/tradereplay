@@ -45,11 +45,11 @@ export async function POST(req: NextRequest) {
     }
     yearCandles.sort((a, b) => a.time - b.time)
 
-    // If we got zero candles and had fetch errors, Dukascopy is likely blocked
+    // If we got zero candles and had fetch errors, the upstream feed is likely blocked
     if (yearCandles.length === 0 && fetchErrors.length > 0) {
       return NextResponse.json({
         ok: false, symbol, year, candles: 0,
-        error: `Dukascopy unreachable from server. Sample errors: ${fetchErrors.slice(0, 3).join(' | ')}`,
+        error: `Market data feed unreachable from server. Sample errors: ${fetchErrors.slice(0, 3).join(' | ')}`,
         fetchErrors,
       }, { status: 502 })
     }

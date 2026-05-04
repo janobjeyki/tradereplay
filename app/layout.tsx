@@ -6,7 +6,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext'
 
 export const metadata: Metadata = {
   title: 'TradeLab — Candle Replay Platform',
-  description: 'Replay real Dukascopy historical data candle-by-candle.',
+  description: 'Replay real historical market data candle-by-candle.',
 }
 
 export const viewport: Viewport = {
