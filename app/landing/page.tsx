@@ -24,6 +24,14 @@ function ArrowRight() {
   )
 }
 
+function StarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+      <path d="M7 0l1.92 4.36L13 5l-3.5 3 1 4.5L7 10.36 2.5 12.5l1-4.5L0 5l4.08-.64L7 0z" />
+    </svg>
+  )
+}
+
 function CandleIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -121,6 +129,45 @@ export default function LandingPage() {
     t('pricingFeatData'),
   ]
 
+  const bigFeatures = [
+    {
+      eyebrow: 'Replay engine',
+      title: 'Practice on real history,\ntick by tick',
+      desc: 'Step through any market session at your own pace. Pause, rewind, fast-forward, take a position — exactly like trading live, without the risk.',
+      bullets: ['Bar-by-bar replay', 'Variable speed control', 'Multi-timeframe analysis'],
+    },
+    {
+      eyebrow: 'Trade journal',
+      title: 'Find your edge\nin every trade',
+      desc: 'Auto-logged trades with screenshots, tags, and notes. Spot patterns in your wins — and your mistakes — before they cost you.',
+      bullets: ['Automatic trade logging', 'Tags, notes & screenshots', 'Custom checklist per setup'],
+    },
+    {
+      eyebrow: 'Performance analytics',
+      title: 'Stats that actually\nmatter to traders',
+      desc: 'Win rate, expectancy, R-multiples, equity curve, drawdown, and more. See exactly what is working — and what is not.',
+      bullets: ['Equity curve & drawdown', 'Performance by setup, day & time', 'R-multiple distribution'],
+    },
+  ]
+
+  const testimonials = [
+    {
+      quote: 'I have learned more from a week on TradeLab than a month of live trading. The replay is the closest thing to actually being there.',
+      name: 'Marcus Chen',
+      role: 'Day trader, 3 yrs',
+    },
+    {
+      quote: 'Finally a journal that does not feel like homework. Tags my trades automatically and the analytics page is genuinely useful.',
+      name: 'Sara Petrov',
+      role: 'Swing trader',
+    },
+    {
+      quote: 'Built my entire strategy in here before going live. Saved me thousands in tuition.',
+      name: 'Daniel Okafor',
+      role: 'Prop firm trader',
+    },
+  ]
+
   return (
     <div className="min-h-screen flex flex-col" style={{ color: 'var(--text-primary)' }}>
 
@@ -134,6 +181,7 @@ export default function LandingPage() {
           <div className="hidden lg:flex items-center gap-7 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
             <a href="#features" className="transition-colors hover:text-[var(--text-primary)]">{t('about')}</a>
             <a href="#how" className="transition-colors hover:text-[var(--text-primary)]">{t('howTitle')}</a>
+            <a href="#testimonials" className="transition-colors hover:text-[var(--text-primary)]">Reviews</a>
             <a href="#pricing" className="transition-colors hover:text-[var(--text-primary)]">{t('pricing')}</a>
             <Link href="/support" className="transition-colors hover:text-[var(--text-primary)]">{t('contact')}</Link>
           </div>
@@ -173,23 +221,23 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-20 pb-0 text-center relative overflow-hidden">
+      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-24 pb-0 text-center relative overflow-hidden">
         <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(244,87,131,0.08) 0%, transparent 62%)' }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1100px] h-[1100px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(244,87,131,0.10) 0%, transparent 60%)' }}
         />
 
         <span
-          className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-full mb-7"
+          className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-1.5 rounded-full mb-7 relative z-10"
           style={{ background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
           <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'var(--accent)', boxShadow: '0 0 6px var(--accent)' }} />
-          Candle-by-candle trading simulator
+          The trading journal & replay platform
         </span>
 
         <h1
-          className="font-black leading-[1.06] tracking-tight mb-2"
+          className="font-black leading-[1] tracking-tight mb-3 max-w-5xl relative z-10"
           style={{
-            fontSize: 'clamp(40px, 6.5vw, 76px)',
+            fontSize: 'clamp(44px, 7.5vw, 92px)',
             background: 'linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -197,16 +245,16 @@ export default function LandingPage() {
           {t('heroH1')}
         </h1>
         <h1
-          className="font-black leading-[1.06] tracking-tight mb-8"
-          style={{ fontSize: 'clamp(40px, 6.5vw, 76px)', color: 'var(--accent)' }}>
+          className="font-black leading-[1] tracking-tight mb-8 relative z-10"
+          style={{ fontSize: 'clamp(44px, 7.5vw, 92px)', color: 'var(--accent)' }}>
           {t('heroH2')}
         </h1>
 
-        <p className="text-lg max-w-xl leading-relaxed mb-10" style={{ color: 'var(--text-secondary)' }}>
+        <p className="text-lg md:text-xl max-w-2xl leading-relaxed mb-10 relative z-10" style={{ color: 'var(--text-secondary)' }}>
           {t('heroSub')}
         </p>
 
-        <div className="flex gap-3 flex-wrap justify-center">
+        <div className="flex gap-3 flex-wrap justify-center relative z-10">
           <Link
             href="/auth/register"
             className="inline-flex items-center gap-2 px-8 py-4 font-bold rounded-xl text-white transition-all hover:-translate-y-0.5 text-[15px]"
@@ -222,10 +270,18 @@ export default function LandingPage() {
           </Link>
         </div>
 
-        {/* Chart preview — floats into the stats bar */}
+        {/* Rating row */}
+        <div className="flex items-center gap-5 mt-8 text-sm relative z-10" style={{ color: 'var(--text-muted)' }}>
+          <div className="flex items-center gap-1.5" style={{ color: 'var(--accent)' }}>
+            <StarIcon /><StarIcon /><StarIcon /><StarIcon /><StarIcon />
+          </div>
+          <span>Loved by traders worldwide</span>
+        </div>
+
+        {/* Chart preview */}
         <div
-          className="mt-14 glass-card rounded-2xl p-4 w-full max-w-4xl relative z-10"
-          style={{ boxShadow: '0 40px 80px rgba(0,0,0,0.45)' }}>
+          className="mt-16 glass-card rounded-2xl p-4 w-full max-w-5xl relative z-10"
+          style={{ boxShadow: '0 50px 100px rgba(0,0,0,0.5), 0 0 0 1px var(--border-default)' }}>
           <div className="flex gap-4 items-center mb-3 px-1">
             <span className="font-bold text-sm">XAU/USD</span>
             <span className="font-mono text-sm" style={{ color: 'var(--green)' }}>2,649.50</span>
@@ -238,50 +294,165 @@ export default function LandingPage() {
 
       {/* Stats bar */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)' }}>
-        <div className="max-w-5xl mx-auto px-6 py-10 grid grid-cols-2 md:grid-cols-4 gap-8">
+        <div className="max-w-5xl mx-auto px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-8">
           {stats.map((s, i) => (
             <div key={i} className="flex flex-col items-center text-center">
-              <span className="text-3xl font-black tracking-tight" style={{ color: 'var(--accent)' }}>{s.value}</span>
+              <span className="text-4xl font-black tracking-tight" style={{ color: 'var(--accent)' }}>{s.value}</span>
               <span className="text-sm mt-1.5" style={{ color: 'var(--text-muted)' }}>{s.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Features */}
+      {/* Big alternating feature blocks */}
       <section id="features" className="px-6 md:px-10 py-24 max-w-6xl mx-auto w-full">
-        <div className="text-center mb-16">
-          <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>Features</span>
-          <h2 className="text-3xl md:text-[42px] font-black mt-3 mb-5 tracking-tight leading-tight">
-            Everything you need to become<br className="hidden md:block" /> a better trader
+        <div className="text-center mb-20">
+          <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>Built for serious traders</span>
+          <h2 className="text-3xl md:text-[48px] font-black mt-3 mb-5 tracking-tight leading-[1.05]">
+            Everything you need to become<br className="hidden md:block" /> a profitable trader
           </h2>
-          <p className="text-base max-w-md mx-auto leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            One platform to simulate, journal, and analyse your trading performance.
+          <p className="text-base md:text-lg max-w-xl mx-auto leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            Replay, journal, and analyse — in one platform that thinks like a trader.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map(({ Icon, title, desc }, i) => (
-            <div
-              key={i}
-              className="glass-card rounded-2xl p-7 transition-all hover:-translate-y-1 group">
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center mb-5 transition-colors"
-                style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
-                <Icon />
+        <div className="space-y-24">
+          {bigFeatures.map((f, i) => (
+            <div key={i} className={`grid md:grid-cols-2 gap-10 md:gap-16 items-center ${i % 2 === 1 ? 'md:[&>*:first-child]:order-2' : ''}`}>
+              <div>
+                <span className="text-xs font-bold uppercase tracking-[0.22em] block mb-4" style={{ color: 'var(--accent)' }}>
+                  {f.eyebrow}
+                </span>
+                <h3 className="text-3xl md:text-[40px] font-black tracking-tight leading-[1.05] mb-5 whitespace-pre-line">
+                  {f.title}
+                </h3>
+                <p className="text-base md:text-lg leading-relaxed mb-7" style={{ color: 'var(--text-secondary)' }}>
+                  {f.desc}
+                </p>
+                <ul className="space-y-3">
+                  {f.bullets.map((b, j) => (
+                    <li key={j} className="flex items-center gap-3 text-sm md:text-base">
+                      <span
+                        className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                        style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                        <CheckIcon />
+                      </span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{b}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <h3 className="font-bold text-[17px] mb-2.5 tracking-tight">{title}</h3>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{desc}</p>
+
+              {/* Mock visual */}
+              <div className="glass-card rounded-2xl p-5 md:p-6" style={{ boxShadow: '0 30px 60px rgba(0,0,0,0.35)' }}>
+                {i === 0 && (
+                  <div>
+                    <div className="flex gap-2 mb-3">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--red)' }} />
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--green)' }} />
+                    </div>
+                    <PreviewChart />
+                    <div className="flex items-center justify-center gap-3 mt-4">
+                      <button className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>⏮</button>
+                      <button className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>⏯</button>
+                      <button className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{ background: 'var(--accent)' }}>▶</button>
+                      <button className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>⏭</button>
+                    </div>
+                  </div>
+                )}
+                {i === 1 && (
+                  <div className="space-y-2.5">
+                    {[
+                      { sym: 'XAU/USD', side: 'LONG', r: '+2.4R', win: true },
+                      { sym: 'EUR/USD', side: 'SHORT', r: '+1.1R', win: true },
+                      { sym: 'GBP/JPY', side: 'LONG',  r: '−0.8R', win: false },
+                      { sym: 'US100',   side: 'LONG',  r: '+3.2R', win: true },
+                      { sym: 'BTC/USD', side: 'SHORT', r: '−1.0R', win: false },
+                    ].map((tr, k) => (
+                      <div key={k} className="flex items-center gap-3 px-3.5 py-3 rounded-xl" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+                        <span className="font-bold text-sm w-20">{tr.sym}</span>
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded"
+                          style={{ background: tr.side === 'LONG' ? 'var(--green-muted)' : 'var(--red-muted)', color: tr.side === 'LONG' ? 'var(--green)' : 'var(--red)' }}>
+                          {tr.side}
+                        </span>
+                        <span className="ml-auto font-mono text-sm font-bold" style={{ color: tr.win ? 'var(--green)' : 'var(--red)' }}>{tr.r}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {i === 2 && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { l: 'Win rate',     v: '62%',  c: 'var(--green)' },
+                        { l: 'Expectancy',   v: '+0.84R', c: 'var(--green)' },
+                        { l: 'Profit factor', v: '2.31',   c: 'var(--accent)' },
+                        { l: 'Max DD',       v: '−4.2R', c: 'var(--red)' },
+                      ].map((m, k) => (
+                        <div key={k} className="px-4 py-3 rounded-xl" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+                          <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{m.l}</div>
+                          <div className="text-xl font-black font-mono" style={{ color: m.c }}>{m.v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 py-4 rounded-xl" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+                      <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Equity curve</div>
+                      <svg viewBox="0 0 200 50" className="w-full h-14">
+                        <polyline
+                          fill="none"
+                          stroke="var(--accent)"
+                          strokeWidth="2"
+                          points="0,40 20,38 40,32 60,28 80,30 100,22 120,18 140,20 160,12 180,8 200,4"
+                        />
+                        <polyline
+                          fill="var(--accent-muted)"
+                          stroke="none"
+                          points="0,40 20,38 40,32 60,28 80,30 100,22 120,18 140,20 160,12 180,8 200,4 200,50 0,50"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* How it works */}
+      {/* Feature grid (smaller cards under big blocks) */}
       <section
-        id="how"
         className="px-6 md:px-10 py-24"
         style={{ background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>Features</span>
+            <h2 className="text-3xl md:text-[42px] font-black mt-3 tracking-tight leading-tight">
+              Every tool a trader needs
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {features.map(({ Icon, title, desc }, i) => (
+              <div
+                key={i}
+                className="glass-card rounded-2xl p-7 transition-all hover:-translate-y-1 group">
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center mb-5 transition-colors"
+                  style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                  <Icon />
+                </div>
+                <h3 className="font-bold text-[17px] mb-2.5 tracking-tight">{title}</h3>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section id="how" className="px-6 md:px-10 py-24">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
             <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>Process</span>
@@ -298,6 +469,48 @@ export default function LandingPage() {
                 </div>
                 <h3 className="font-bold text-lg mb-2.5 tracking-tight">{step.title}</h3>
                 <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section
+        id="testimonials"
+        className="px-6 md:px-10 py-24"
+        style={{ background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <span className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--accent)' }}>Testimonials</span>
+            <h2 className="text-3xl md:text-[42px] font-black mt-3 mb-4 tracking-tight leading-tight">
+              Loved by traders worldwide
+            </h2>
+            <p className="text-base max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
+              Hear from traders who use TradeLab to sharpen their edge every day.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {testimonials.map((tm, i) => (
+              <div key={i} className="glass-card rounded-2xl p-7 flex flex-col">
+                <div className="flex items-center gap-1 mb-4" style={{ color: 'var(--accent)' }}>
+                  <StarIcon /><StarIcon /><StarIcon /><StarIcon /><StarIcon />
+                </div>
+                <p className="text-[15px] leading-relaxed mb-6 flex-1" style={{ color: 'var(--text-primary)' }}>
+                  “{tm.quote}”
+                </p>
+                <div className="flex items-center gap-3 pt-5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white"
+                    style={{ background: 'var(--accent)' }}>
+                    {tm.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm">{tm.name}</div>
+                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{tm.role}</div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
