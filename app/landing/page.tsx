@@ -385,7 +385,7 @@ export default function LandingPage() {
         className="fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-out"
         style={{ transform: navHidden ? 'translateY(-130%)' : 'translateY(0)' }}>
         <div
-          className="flex items-center justify-between px-4 sm:px-6 md:px-10 py-3 sm:py-3.5 gap-2 sm:gap-4 transition-all duration-300"
+          className="flex items-center justify-between px-4 sm:px-6 md:px-10 py-1.5 sm:py-2 gap-2 sm:gap-4 transition-all duration-300"
           style={{
             background: navScrolled
               ? 'linear-gradient(135deg, rgba(33,45,70,0.96) 0%, rgba(47,60,89,0.96) 60%, rgba(244,87,131,0.18) 100%)'
@@ -442,7 +442,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero — extra top padding for fixed nav */}
-      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-40 sm:pt-44 pb-0 text-center relative overflow-hidden">
+      <section className="grid-bg flex flex-col items-center justify-center px-6 md:px-10 pt-32 sm:pt-36 pb-0 text-center relative overflow-hidden">
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1100px] h-[1100px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(circle, rgba(244,87,131,0.10) 0%, transparent 60%)' }}
