@@ -134,6 +134,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </Link>
                   )
                 })}
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-2xl px-4 py-3 transition-all text-left"
+                  style={{
+                    background: theme === 'light' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    border: `1px solid ${theme === 'light' ? 'rgba(126, 147, 184, 0.14)' : 'transparent'}`,
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center text-sm" style={{
+                      background: theme === 'light' ? 'rgba(229, 236, 247, 0.9)' : 'var(--bg-tertiary)',
+                      color: 'var(--red)',
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M15 8l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M19 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M12 4H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--red)' }}>{t('logout')}</p>
+                      <p className="text-xs" style={{ color: theme === 'light' ? '#6c7f9f' : 'var(--text-muted)' }}>Exit account</p>
+                    </div>
+                  </div>
+                </button>
               </div>
             </nav>
 
@@ -209,11 +236,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
               </div>
 
-              <button onClick={handleLogout}
-                className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-3 rounded-2xl text-sm font-medium transition-all"
-                style={{ color:'var(--red)', border:'1px solid var(--border-default)', background: theme === 'light' ? 'rgba(255,255,255,0.72)' : 'var(--bg-tertiary)' }}>
-                {t('logout')}
-              </button>
             </div>
           </aside>
         </div>
