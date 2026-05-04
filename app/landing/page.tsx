@@ -388,15 +388,15 @@ export default function LandingPage() {
           className="flex items-center justify-between px-4 sm:px-6 md:px-10 h-[72px] gap-3 sm:gap-4 transition-all duration-300"
           style={{
             background: navScrolled
-              ? 'linear-gradient(90deg, rgba(244,87,131,0.85) 0%, rgba(108,71,255,0.85) 50%, rgba(26,36,55,0.92) 100%)'
-              : 'linear-gradient(90deg, rgba(244,87,131,0.75) 0%, rgba(108,71,255,0.75) 50%, rgba(26,36,55,0.85) 100%)',
-            borderBottom: '1px solid var(--border-default)',
-            boxShadow: navScrolled ? '0 12px 30px rgba(8,12,22,0.35)' : 'none',
+              ? 'linear-gradient(90deg, rgba(22,29,44,0.96) 0%, rgba(34,45,68,0.94) 50%, rgba(15,22,35,0.96) 100%)'
+              : 'linear-gradient(90deg, rgba(26,36,55,0.92) 0%, rgba(37,50,75,0.9) 50%, rgba(19,27,40,0.94) 100%)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: navScrolled ? '0 14px 32px rgba(3, 7, 18, 0.5)' : '0 10px 26px rgba(3, 7, 18, 0.4)',
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
           }}>
-          <div className="flex items-center gap-3.5 shrink-0">
-            <TradeLabLogo className="h-14 w-auto" />
+          <div className="flex items-center gap-3.5 shrink-0 rounded-xl px-2 py-1" style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <TradeLabLogo className="h-12 w-auto" />
           </div>
 
           <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium" style={{ color: 'var(--text-secondary)' }}>
