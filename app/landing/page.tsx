@@ -298,29 +298,10 @@ export default function LandingPage() {
   const { t, lang, setLang } = useLang()
   const { theme, toggleTheme } = useTheme()
 
-  // Scroll-aware navbar: hide when scrolling down, show when scrolling up.
-  const [navHidden, setNavHidden] = useState(false)
   const [navScrolled, setNavScrolled] = useState(false)
   useEffect(() => {
-    let lastY = window.scrollY
-    let ticking = false
-    function onScroll() {
-      if (ticking) return
-      ticking = true
-      requestAnimationFrame(() => {
-        const y = window.scrollY
-        setNavScrolled(y > 12)
-        if (y < 80) {
-          setNavHidden(false)
-        } else if (y > lastY + 6) {
-          setNavHidden(true)
-        } else if (y < lastY - 6) {
-          setNavHidden(false)
-        }
-        lastY = y
-        ticking = false
-      })
-    }
+    const onScroll = () => setNavScrolled(window.scrollY > 12)
+    onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
@@ -380,10 +361,9 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col" style={{ color: 'var(--text-primary)' }}>
 
-      {/* Nav — fixed to top, full width, hides on scroll-down, slides back on scroll-up */}
+      {/* Nav — fixed to top, full width */}
       <nav
-        className="fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-out"
-        style={{ transform: navHidden ? 'translateY(-130%)' : 'translateY(0)' }}>
+        className="fixed top-0 left-0 right-0 z-50">
         <div
           className="flex items-center justify-between px-4 sm:px-6 md:px-10 h-[72px] gap-3 sm:gap-4 transition-all duration-300"
           style={{
@@ -402,7 +382,7 @@ export default function LandingPage() {
             WebkitBackdropFilter: 'blur(14px)',
           }}>
           <div className="flex items-center gap-3.5 shrink-0">
-            <TradeLabLogo className="h-[50px] w-[50px]" />
+            <TradeLabLogo className="h-[100px] w-[100px]" />
           </div>
 
           <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium" style={{ color: 'var(--text-secondary)' }}>
