@@ -380,17 +380,17 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col" style={{ color: 'var(--text-primary)' }}>
 
-      {/* Nav — fixed to top, hides on scroll-down, slides back on scroll-up */}
+      {/* Nav — fixed to top, full width, hides on scroll-down, slides back on scroll-up */}
       <nav
-        className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 md:px-10 pt-3 sm:pt-4 transition-transform duration-300 ease-out"
+        className="fixed top-0 left-0 right-0 z-50 transition-transform duration-300 ease-out"
         style={{ transform: navHidden ? 'translateY(-130%)' : 'translateY(0)' }}>
         <div
-          className="rounded-2xl flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 gap-2 sm:gap-4 transition-all duration-300"
+          className="flex items-center justify-between px-4 sm:px-6 md:px-10 py-3 sm:py-3.5 gap-2 sm:gap-4 transition-all duration-300"
           style={{
             background: navScrolled
-              ? 'linear-gradient(180deg, rgba(26,36,55,0.92) 0%, rgba(18,26,40,0.92) 100%)'
-              : 'linear-gradient(180deg, rgba(26,36,55,0.78) 0%, rgba(18,26,40,0.78) 100%)',
-            border: '1px solid var(--border-default)',
+              ? 'linear-gradient(90deg, rgba(244,87,131,0.85) 0%, rgba(108,71,255,0.85) 50%, rgba(26,36,55,0.92) 100%)'
+              : 'linear-gradient(90deg, rgba(244,87,131,0.75) 0%, rgba(108,71,255,0.75) 50%, rgba(26,36,55,0.85) 100%)',
+            borderBottom: '1px solid var(--border-default)',
             boxShadow: navScrolled ? '0 12px 30px rgba(8,12,22,0.35)' : 'none',
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
